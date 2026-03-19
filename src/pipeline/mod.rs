@@ -143,8 +143,20 @@ fn execute_segment(
     let extra = seg_config.map(|s| &s.extra).unwrap_or(&empty);
     let mut scope = host::segment_scope(extra);
 
-    let ast = engine.compile_source(&script_source).ok()?;
-    engine.eval_ast_with_scope(&ast, &mut scope).ok()?
+    let ast = match engine.compile_source(&script_source) {
+        Ok(ast) => ast,
+        Err(e) => {
+            eprintln!("promptorius: {script_name}: {e}");
+            return None;
+        }
+    };
+    match engine.eval_ast_with_scope(&ast, &mut scope) {
+        Ok(result) => result,
+        Err(e) => {
+            eprintln!("promptorius: {script_name}: {e}");
+            None
+        }
+    }
 }
 
 /// Wrap ANSI escape sequences for shell-specific prompt rendering.

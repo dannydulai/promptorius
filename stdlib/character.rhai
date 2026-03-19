@@ -10,7 +10,7 @@ if count < 1 { count = 1; }
 let result = "";
 
 // Show ҂ if there are background jobs
-let count = jobs()
+let count = jobs();
 
 if count > 0 {
     result += color("jobs") + "҂ ";
