@@ -5,4 +5,4 @@ if code == 0 {
     return ();
 }
 
-color("error") + "Exited w/ " + code + color("") + "\n"
+color("error") + "Exited w/ " + code + color("")

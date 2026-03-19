@@ -100,7 +100,8 @@ pub fn run(args: Args) -> Result<(), CliError> {
 fn run_prompt(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     let cfg = config::load()?;
     let cmds = parse_cmds(cmd_args);
-    let script_dirs = config::script_search_paths(&cfg.settings);
+    let mut script_dirs = config::script_search_paths(&cfg.settings);
+    append_stdlib_dir(&mut script_dirs);
     let stdlib = stdlib_scripts();
 
     let output = pipeline::render(&cfg, &cmds, right, &script_dirs, &stdlib)?;
@@ -111,7 +112,8 @@ fn run_prompt(cmd_args: &[String], right: bool) -> Result<(), CliError> {
 fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     let cfg = config::load()?;
     let cmds = parse_cmds(cmd_args);
-    let script_dirs = config::script_search_paths(&cfg.settings);
+    let mut script_dirs = config::script_search_paths(&cfg.settings);
+    append_stdlib_dir(&mut script_dirs);
     let stdlib = stdlib_scripts();
 
     let start = std::time::Instant::now();
@@ -129,7 +131,8 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
 
 fn run_check() -> Result<(), CliError> {
     let cfg = config::load()?;
-    let script_dirs = config::script_search_paths(&cfg.settings);
+    let mut script_dirs = config::script_search_paths(&cfg.settings);
+    append_stdlib_dir(&mut script_dirs);
     let stdlib = stdlib_scripts();
 
     eprintln!("config: ok ({})", config::config_path().display());
@@ -221,7 +224,21 @@ fn parse_cmds(args: &[String]) -> Vec<host::CmdDef> {
         .collect()
 }
 
+/// In debug builds, add `./stdlib/` next to the binary as a search path
+/// so scripts can be edited without rebuilding.
+fn append_stdlib_dir(dirs: &mut Vec<std::path::PathBuf>) {
+    #[cfg(debug_assertions)]
+    {
+        // Check for stdlib/ relative to the cargo manifest dir (repo root)
+        let manifest_stdlib = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("stdlib");
+        if manifest_stdlib.is_dir() {
+            dirs.push(manifest_stdlib);
+        }
+    }
+}
+
 /// Bundled stdlib scripts, embedded at compile time.
+/// In debug builds these serve as fallback — the filesystem copy takes priority.
 fn stdlib_scripts() -> HashMap<String, &'static str> {
     let mut m = HashMap::new();
     m.insert("directory.rhai".to_string(), include_str!("../../stdlib/directory.rhai"));
