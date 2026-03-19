@@ -36,7 +36,7 @@ pub struct PromptConfig {
     pub format: String,
     #[serde(default)]
     pub right_format: Option<String>,
-    #[serde(default = "default_true")]
+    #[serde(default)]
     pub add_newline: bool,
 }
 
