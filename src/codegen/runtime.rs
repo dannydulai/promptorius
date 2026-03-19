@@ -292,14 +292,14 @@ fn parse_color_to_rgb(s: &str) -> (u8, u8, u8) {
             _ => (255, 255, 255),
         };
     }
-    match s {
+    match s.replace(' ', "_").as_str() {
         "black" => (0, 0, 0), "red" => (255, 0, 0), "green" => (0, 255, 0),
         "yellow" => (255, 255, 0), "blue" => (0, 0, 255), "magenta" | "purple" => (255, 0, 255),
         "cyan" => (0, 255, 255), "white" => (255, 255, 255),
         "bright_black" => (128, 128, 128), "bright_red" => (255, 85, 85),
         "bright_green" => (85, 255, 85), "bright_yellow" => (255, 255, 85),
-        "bright_blue" => (85, 85, 255), "bright_magenta" => (255, 85, 255),
-        "bright_cyan" => (85, 255, 255),
+        "bright_blue" => (85, 85, 255), "bright_magenta" | "bright_purple" => (255, 85, 255),
+        "bright_cyan" => (85, 255, 255), "bright_white" => (255, 255, 255),
         _ => (255, 255, 255),
     }
 }
