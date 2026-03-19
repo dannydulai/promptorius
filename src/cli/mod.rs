@@ -111,7 +111,11 @@ fn run_prompt(cmd_args: &[String], right: bool) -> Result<(), CliError> {
 
 fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     let cfg = config::load()?;
-    let cmds = parse_cmds(cmd_args);
+    // Strip shell cmd so explain outputs raw ANSI (not %{...%} wrapped)
+    let cmds: Vec<_> = parse_cmds(cmd_args)
+        .into_iter()
+        .filter(|c| c.name != "shell")
+        .collect();
     let mut script_dirs = config::script_search_paths(&cfg.settings);
     append_stdlib_dir(&mut script_dirs);
     let stdlib = stdlib_scripts();
