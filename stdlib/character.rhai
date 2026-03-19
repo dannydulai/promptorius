@@ -20,4 +20,4 @@ let result = " " + color(col);
 for i in 0..count {
     result += char;
 }
-result + color("")
+result + color("") + " "

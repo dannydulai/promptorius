@@ -10,7 +10,7 @@ __promptorius_prompt_command() {
         duration_ms=$(( now - _promptorius_start ))
     fi
     unset _promptorius_start
-    PS1="$(promptorius --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")"
+    PS1="$(promptorius --cmd ":str:shell:bash" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")"
 }
 
 trap '__promptorius_timer_start' DEBUG

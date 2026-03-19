@@ -96,6 +96,13 @@ pub fn render(
         output
     };
 
+    // Wrap ANSI escapes for shell compatibility
+    let shell = cmds.iter().find(|c| c.name == "shell");
+    let output = match shell.map(|c| &c.value) {
+        Some(host::CmdValue::Str(s)) => wrap_escapes_for_shell(&output, s),
+        _ => output,
+    };
+
     Ok(output)
 }
 
@@ -138,6 +145,51 @@ fn execute_segment(
 
     let ast = engine.compile_source(&script_source).ok()?;
     engine.eval_ast_with_scope(&ast, &mut scope).ok()?
+}
+
+/// Wrap ANSI escape sequences for shell-specific prompt rendering.
+/// zsh needs `%{...%}`, bash needs `\[...\]` to mark zero-width characters.
+fn wrap_escapes_for_shell(s: &str, shell: &str) -> String {
+    match shell {
+        "zsh" => wrap_ansi_escapes(s, "%{", "%}"),
+        "bash" => wrap_ansi_escapes(s, "\\[", "\\]"),
+        _ => s.to_string(),
+    }
+}
+
+/// Wrap all ANSI escape sequences (\x1b[...m) with the given prefix/suffix.
+fn wrap_ansi_escapes(s: &str, prefix: &str, suffix: &str) -> String {
+    let mut result = String::with_capacity(s.len() * 2);
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        if bytes[i] == 0x1b && i + 1 < len && bytes[i + 1] == b'[' {
+            // Start of ANSI escape sequence
+            result.push_str(prefix);
+            result.push('\x1b');
+            result.push('[');
+            i += 2;
+            // Consume until 'm' (SGR terminator)
+            while i < len {
+                result.push(bytes[i] as char);
+                if bytes[i] == b'm' {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            result.push_str(suffix);
+        } else {
+            // Regular byte — could be multi-byte UTF-8
+            let c = s[i..].chars().next().unwrap();
+            result.push(c);
+            i += c.len_utf8();
+        }
+    }
+
+    result
 }
 
 /// Resolve a script filename to its source code by searching directories, then stdlib.

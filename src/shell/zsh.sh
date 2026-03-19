@@ -5,7 +5,7 @@ promptorius_precmd() {
         local elapsed=$(( EPOCHREALTIME - _promptorius_start ))
         duration_ms=$(( ${elapsed%.*} * 1000 + 10#${${elapsed#*.}:0:3} ))
     fi
-    _promptorius_cmd_args=(--cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")
+    _promptorius_cmd_args=(--cmd ":str:shell:zsh" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")
     _promptorius_keymap="${KEYMAP:-}"
     promptorius_render
 }
