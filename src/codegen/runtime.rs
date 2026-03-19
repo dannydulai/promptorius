@@ -850,13 +850,17 @@ fn value_index(obj: &Value, idx: &Value) -> Value {
 // --- Shell escape wrapping ---
 fn wrap_escapes_for_shell(s: &str, shell: &str) -> String {
     match shell {
-        "zsh" => wrap_ansi(s, "%{", "%}"),
-        "bash" => wrap_ansi(s, "\\[", "\\]"),
+        "zsh" => wrap_ansi_zsh(s),
+        "bash" => wrap_ansi(s, "\\[", "\\]", false),
         _ => s.to_string(),
     }
 }
 
-fn wrap_ansi(s: &str, prefix: &str, suffix: &str) -> String {
+fn wrap_ansi_zsh(s: &str) -> String {
+    wrap_ansi(s, "%{", "%}", true)
+}
+
+fn wrap_ansi(s: &str, prefix: &str, suffix: &str, escape_pct: bool) -> String {
     let mut result = String::with_capacity(s.len() * 2);
     let bytes = s.as_bytes();
     let len = bytes.len();
@@ -875,7 +879,11 @@ fn wrap_ansi(s: &str, prefix: &str, suffix: &str) -> String {
             result.push_str(suffix);
         } else {
             let c = s[i..].chars().next().unwrap();
-            result.push(c);
+            if escape_pct && c == '%' {
+                result.push_str("%%");
+            } else {
+                result.push(c);
+            }
             i += c.len_utf8();
         }
     }
