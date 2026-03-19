@@ -18,9 +18,4 @@ pub fn register(engine: &mut Engine, colors: &HashMap<String, ColorDef>) {
         }
     });
 
-    // TODO: load icon map (nerd font names -> unicode codepoints)
-    engine.register_fn("icon", |_name: &str| -> String {
-        // Placeholder — return empty until icon map is implemented
-        String::new()
-    });
 }

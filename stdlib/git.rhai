@@ -12,14 +12,14 @@ if branch.len() > max_len {
 let s = git_status();
 let indicators = "";
 
-if s.staged > 0    { indicators += color("success") + "+"; }
-if s.modified > 0  { indicators += color("warning") + "!"; }
-if s.untracked > 0 { indicators += color("error") + "?"; }
-if s.conflicts > 0 { indicators += color("error") + "✘"; }
+if s.staged > 0    { indicators += color("git-staged") + "+"; }
+if s.modified > 0  { indicators += color("git-modified") + "!"; }
+if s.untracked > 0 { indicators += color("git-untracked") + "?"; }
+if s.conflicts > 0 { indicators += color("git-conflicts") + "✘"; }
 if indicators != "" { indicators += color(""); }
 
 let remote = "";
 if s.ahead > 0  { remote += "↑" + s.ahead; }
 if s.behind > 0 { remote += "↓" + s.behind; }
 
-icon("git-branch") + " " + branch + " " + indicators + remote
+color("git-branch") + " " + branch + " " + indicators + remote

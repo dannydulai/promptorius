@@ -179,7 +179,6 @@ These are Rust functions registered into the Rhai engine, callable from any scri
 | Function | Signature | Description |
 |---|---|---|
 | `color` | `(name: &str) -> String` | Emit ANSI escape to set the named color from `[colors]`. Pass `""` to reset. |
-| `icon` | `(name: &str) -> String` | Resolve a named Nerd Font icon, e.g. `icon("git-branch")` |
 
 #### Cache (namespaced per segment)
 
