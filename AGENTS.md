@@ -27,7 +27,6 @@ src/
 └── shell/                  # Shell init scripts
 ```
 
-Legacy code (to be removed): `config/`, `host/`, `pipeline/`, `render/`, `script/`, `stdlib/`
 
 ## How to work
 
