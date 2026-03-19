@@ -253,7 +253,20 @@ fn color_def_to_ansi(def: &Value) -> String {
             if d.get("italic").map(|v| v.to_bool()).unwrap_or(false) { codes.push("3".to_string()); }
             if d.get("dim").map(|v| v.to_bool()).unwrap_or(false) { codes.push("2".to_string()); }
             if d.get("strikethrough").map(|v| v.to_bool()).unwrap_or(false) { codes.push("9".to_string()); }
-            if d.get("underline").map(|v| v.to_bool()).unwrap_or(false) { codes.push("4".to_string()); }
+            if let Some(ul) = d.get("underline") {
+                match ul.to_str().as_str() {
+                    "single" | "true" => codes.push("4".to_string()),
+                    "double" => codes.push("4:2".to_string()),
+                    "curly" => codes.push("4:3".to_string()),
+                    "dotted" => codes.push("4:4".to_string()),
+                    "dashed" => codes.push("4:5".to_string()),
+                    _ => if ul.to_bool() { codes.push("4".to_string()); }
+                }
+            }
+            if let Some(uc) = d.get("underline_color") {
+                let (r, g, b) = parse_color_to_rgb(&uc.to_str());
+                codes.push(format!("58;2;{r};{g};{b}"));
+            }
             if codes.is_empty() { String::new() } else { format!("\x1b[{}m", codes.join(";")) }
         }
         _ => String::new(),
