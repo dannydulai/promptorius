@@ -16,7 +16,8 @@ promptorius_precmd() {
     fi
     unset _promptorius_start
 
-    _promptorius_cmd_args=(--cmd ":str:shell:zsh" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")
+    local job_count=${(w)#jobstates}
+    _promptorius_cmd_args=(--cmd ":str:shell:zsh" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}" --cmd ":int:jobs:${job_count}")
     _promptorius_keymap="${KEYMAP:-}"
     promptorius_render
 }

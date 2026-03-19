@@ -7,16 +7,23 @@ let shlvl = env("SHLVL");
 let count = if shlvl == "" { 1 } else { shlvl.parse_int() };
 if count < 1 { count = 1; }
 
-let keymap = if env("PROMPTORIUS_KEYMAP") != "" {
-    env("PROMPTORIUS_KEYMAP")
+let result = "";
+
+// Show ҂ if there are background jobs
+let count = jobs()
+
+if count > 0 {
+    result += color("jobs") + "҂ ";
+}
+
+
+
+if keymap() == "vicmd" {
+    result += color("keymap_vicmd")
 } else {
-    // Try --cmd provided keymap
-    try { keymap() } catch { "" }
-};
+    result += color("keymap_normal")
+}
 
-let col = if keymap == "vicmd" { "char_vicmd" } else { "char_normal" };
-
-let result = " " + color(col);
 for i in 0..count {
     result += char;
 }

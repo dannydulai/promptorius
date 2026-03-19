@@ -19,7 +19,8 @@ __promptorius_prompt_command() {
     fi
     unset _promptorius_start
 
-    PS1="$(promptorius --cmd ":str:shell:bash" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")"
+    local job_count=$(jobs -r | wc -l | tr -d ' ')
+    PS1="$(promptorius --cmd ":str:shell:bash" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}" --cmd ":int:jobs:${job_count}")"
 }
 
 trap '__promptorius_timer_start' DEBUG

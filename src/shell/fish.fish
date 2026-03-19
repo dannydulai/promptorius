@@ -1,7 +1,8 @@
 function __promptorius_cmd_args
     set -l exit_code $argv[1]
     set -l duration $argv[2]
-    echo "--cmd :int:exit_code:$exit_code --cmd :int:duration:$duration"
+    set -l job_count (count (jobs -p))
+    echo "--cmd :int:exit_code:$exit_code --cmd :int:duration:$duration --cmd :int:jobs:$job_count"
 end
 
 function fish_prompt

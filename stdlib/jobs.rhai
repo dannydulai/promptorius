@@ -1,7 +1,7 @@
 // Show ҂ if there are background jobs
-let count = env("PROMPTORIUS_JOBS");
+let count = jobs();
 
-if count == "" || count == "0" {
+if count == 0 {
     return ();
 }
 
