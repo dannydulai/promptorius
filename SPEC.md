@@ -78,6 +78,7 @@ Dynamically typed. Values are: string, number (f64), bool, null, array, dict, re
 - `"0" == false` → `true`
 - `null == false` → `true`
 - `null === false` → `false`
+- `null ?? "default"` → `"default"` (null coalescing — returns right side only if left is `null`)
 
 ### Operators
 
@@ -85,8 +86,10 @@ Arithmetic: `+`, `-`, `*`, `/`, `%`
 Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
 Strict: `===`, `!==`
 Logical: `&&`, `||`, `!`
+Null coalescing: `??`
 Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`
 Ternary: `cond ? a : b`
+Range: `x..y` (for use in `for` loops)
 Member: `.`, `[]`
 
 ### Control flow
@@ -108,7 +111,35 @@ for (item in array) {
     # ...
 }
 
+for (i in 0..10) {
+    # range-based, exclusive end
+}
+
 return value
+```
+
+### Scoping
+
+Variables have lexical scope with global fallback:
+
+- Variables created at the top level are **global** — visible everywhere.
+- Variables created inside a function, loop, or block are **local** — scoped to that block.
+- Reading a variable checks local scope first, then walks up to global scope.
+- Assigning to an existing variable updates it in whatever scope it lives in.
+- Assigning to a new name creates it in the **current local** scope.
+
+```
+x = 10                # global
+
+fn example() {
+    y = 20            # local to example()
+    x = 30            # updates the global x
+    eprint(x)         # 30
+}
+
+example()
+eprint(x)             # 30
+eprint(y)             # null — y is not in global scope
 ```
 
 ### Functions
@@ -205,7 +236,7 @@ fn git_prompt() {
 
 # Required: return the left prompt string
 fn left_prompt() {
-    dir = color("directory") + cwd_home() + color("")
+    dir = color("directory") + cwd().replace(env("HOME"), "~") + color("")
     char = env("USER") == "root" ? "#" : "│"
     col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
 
@@ -231,9 +262,9 @@ fn right_prompt() {
 |---|---|---|
 | `env(name)` | string | Get env var, `""` if unset |
 | `cwd()` | string | Current working directory |
-| `cwd_home()` | string | cwd with `$HOME` replaced by `~` |
 | `os()` | string | `"macos"`, `"linux"`, `"windows"` |
 | `eprint(msg)` | null | Print to stderr (debug) |
+| `set_config(name, val)` | null | Set a config value (e.g. `"timeout"`, `"concurrency"`) |
 
 ### File operations
 
@@ -502,7 +533,7 @@ fn left_prompt() {
     }
 
     # Directory
-    result += color("directory") + cwd_home() + color("")
+    result += color("directory") + cwd().replace(env("HOME"), "~") + color("")
 
     # Prompt character: │ for user, # for root, repeated SHLVL times
     char = env("USER") == "root" ? "#" : "│"
