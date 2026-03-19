@@ -116,19 +116,59 @@ fn default_concurrency() -> usize {
     4
 }
 
-/// Load config from the default path, or return an error.
+/// Load config from the default path. Creates a default config if none exists.
 pub fn load() -> Result<Config, ConfigError> {
     let path = config_path();
     if !path.exists() {
-        return Err(ConfigError::NotFound(path));
+        create_default_config(&path)?;
     }
     let contents = std::fs::read_to_string(&path)?;
     let config: Config = toml::from_str(&contents)?;
     Ok(config)
 }
 
-/// Resolve the config file path using XDG_CONFIG_HOME.
-pub fn config_path() -> PathBuf {
+const DEFAULT_CONFIG: &str = r#"[prompt]
+format = '{s("directory")} {s("git")}{s("character")}'
+right_format = '{s("exitcode")}'
+add_newline = true
+
+[colors]
+default = "white"
+directory = { fg = "cyan", bold = true }
+git = "purple"
+success = "green"
+warning = "yellow"
+error = { fg = "red", bold = true }
+muted = { fg = "bright_black", dim = true }
+
+[segments.directory]
+script = "directory.rhai"
+
+[segments.git]
+script = "git.rhai"
+
+[segments.character]
+script = "character.rhai"
+
+[segments.exitcode]
+script = "exitcode.rhai"
+
+[settings]
+timeout = 50
+concurrency = 4
+"#;
+
+fn create_default_config(path: &std::path::Path) -> Result<(), ConfigError> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, DEFAULT_CONFIG)?;
+    Ok(())
+}
+
+/// Resolve the config directory: `$XDG_CONFIG_HOME/promptorius/`
+/// (defaults to `$HOME/.config/promptorius/`).
+pub fn config_dir() -> PathBuf {
     let base = std::env::var("XDG_CONFIG_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
@@ -136,7 +176,25 @@ pub fn config_path() -> PathBuf {
                 .unwrap_or_else(|| PathBuf::from("."))
                 .join(".config")
         });
-    base.join("promptorius").join("config.toml")
+    base.join("promptorius")
+}
+
+/// Resolve the config file path.
+pub fn config_path() -> PathBuf {
+    config_dir().join("config.toml")
+}
+
+/// Resolve the cache directory: `$XDG_CACHE_HOME/promptorius/`
+/// (defaults to `$HOME/.cache/promptorius/`).
+pub fn cache_dir() -> PathBuf {
+    let base = std::env::var("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join(".cache")
+        });
+    base.join("promptorius")
 }
 
 /// Resolve the ordered list of directories to search for .rhai scripts.
@@ -144,11 +202,7 @@ pub fn script_search_paths(settings: &Settings) -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
     // 1. User config scripts dir (always first)
-    let config_scripts = config_path()
-        .parent()
-        .map(|p| p.join("scripts"))
-        .unwrap_or_default();
-    paths.push(config_scripts);
+    paths.push(config_dir().join("scripts"));
 
     // 2. Additional paths from settings
     for p in &settings.script_path {
