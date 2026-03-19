@@ -2,9 +2,16 @@ promptorius_precmd() {
     local exit_code=$?
     local duration_ms=0
 
+            echo EP:$EPOCHREALTIME
+            echo PS:$_promptorius_start
     if [[ -n "$_promptorius_cmd_ran" ]]; then
         # A command was executed — show its exit code and duration
         if [[ -n "$_promptorius_start" ]]; then
+
+            echo $(( int(rint((EPOCHREALTIME - _promptorius_start) * 1000)) ))
+            echo $(( (rint((EPOCHREALTIME - _promptorius_start) * 1000)) ))
+            echo $(( (((EPOCHREALTIME - _promptorius_start) * 1000)) ))
+            echo $(( _promptorius_start ))
             duration_ms=$(( int(rint((EPOCHREALTIME - _promptorius_start) * 1000)) ))
         fi
         unset _promptorius_cmd_ran
@@ -38,6 +45,7 @@ promptorius_zle_keymap_select() {
     promptorius_render
 }
 
+zmodload zsh/datetime
 zmodload zsh/parameter
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd promptorius_precmd
