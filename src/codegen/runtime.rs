@@ -236,18 +236,15 @@ fn builtin_color(name: &Value) -> Value {
 fn color_def_to_ansi(def: &Value) -> String {
     match def {
         Value::Str(s) => {
-            let (r, g, b) = parse_color_to_rgb(s);
-            format!("\x1b[38;2;{r};{g};{b}m")
+            parse_color_to_sgr(s, true)
         }
         Value::Dict(d) => {
             let mut codes = Vec::new();
             if let Some(fg) = d.get("fg") {
-                let (r, g, b) = parse_color_to_rgb(&fg.to_str());
-                codes.push(format!("38;2;{r};{g};{b}"));
+                codes.push(parse_color_to_sgr_code(&fg.to_str(), true));
             }
             if let Some(bg) = d.get("bg") {
-                let (r, g, b) = parse_color_to_rgb(&bg.to_str());
-                codes.push(format!("48;2;{r};{g};{b}"));
+                codes.push(parse_color_to_sgr_code(&bg.to_str(), false));
             }
             if d.get("bold").map(|v| v.to_bool()).unwrap_or(false) { codes.push("1".to_string()); }
             if d.get("italic").map(|v| v.to_bool()).unwrap_or(false) { codes.push("3".to_string()); }
@@ -264,7 +261,7 @@ fn color_def_to_ansi(def: &Value) -> String {
                 }
             }
             if let Some(uc) = d.get("underline_color") {
-                let (r, g, b) = parse_color_to_rgb(&uc.to_str());
+                let (r, g, b) = color_to_rgb(&uc.to_str());
                 codes.push(format!("58;2;{r};{g};{b}"));
             }
             if codes.is_empty() { String::new() } else { format!("\x1b[{}m", codes.join(";")) }
@@ -273,7 +270,8 @@ fn color_def_to_ansi(def: &Value) -> String {
     }
 }
 
-fn parse_color_to_rgb(s: &str) -> (u8, u8, u8) {
+/// Convert any color string to RGB (for underline_color which requires truecolor).
+fn color_to_rgb(s: &str) -> (u8, u8, u8) {
     let s = s.trim();
     if let Some(hex) = s.strip_prefix('#') {
         return match hex.len() {
@@ -293,15 +291,69 @@ fn parse_color_to_rgb(s: &str) -> (u8, u8, u8) {
         };
     }
     match s {
-        "black" => (0, 0, 0), "red" => (255, 0, 0), "green" => (0, 255, 0),
-        "yellow" => (255, 255, 0), "blue" => (0, 0, 255), "magenta" | "purple" => (255, 0, 255),
-        "cyan" => (0, 255, 255), "white" => (255, 255, 255),
-        "bright black" => (128, 128, 128), "bright red" => (255, 85, 85),
-        "bright green" => (85, 255, 85), "bright yellow" => (255, 255, 85),
-        "bright blue" => (85, 85, 255), "bright magenta" | "bright purple" => (255, 85, 255),
-        "bright cyan" => (85, 255, 255), "bright white" => (255, 255, 255),
+        "black" => (0, 0, 0), "red" => (205, 0, 0), "green" => (0, 205, 0),
+        "yellow" => (205, 205, 0), "blue" => (0, 0, 238), "magenta" | "purple" => (205, 0, 205),
+        "cyan" => (0, 205, 205), "white" => (229, 229, 229),
+        "bright black" => (127, 127, 127), "bright red" => (255, 0, 0),
+        "bright green" => (0, 255, 0), "bright yellow" => (255, 255, 0),
+        "bright blue" => (92, 92, 255), "bright magenta" | "bright purple" => (255, 0, 255),
+        "bright cyan" => (0, 255, 255), "bright white" => (255, 255, 255),
         _ => (255, 255, 255),
     }
+}
+
+/// Parse a color string and return the full SGR escape sequence.
+fn parse_color_to_sgr(s: &str, is_fg: bool) -> String {
+    let code = parse_color_to_sgr_code(s, is_fg);
+    if code.is_empty() { String::new() } else { format!("\x1b[{code}m") }
+}
+
+/// Parse a color string and return just the SGR code (no \x1b[ or m).
+fn parse_color_to_sgr_code(s: &str, is_fg: bool) -> String {
+    let s = s.trim();
+
+    // Hex colors → truecolor
+    if let Some(hex) = s.strip_prefix('#') {
+        let (r, g, b) = match hex.len() {
+            3 => {
+                let r = u8::from_str_radix(&hex[0..1], 16).unwrap_or(0) * 17;
+                let g = u8::from_str_radix(&hex[1..2], 16).unwrap_or(0) * 17;
+                let b = u8::from_str_radix(&hex[2..3], 16).unwrap_or(0) * 17;
+                (r, g, b)
+            }
+            6 => {
+                let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(0);
+                let g = u8::from_str_radix(&hex[2..4], 16).unwrap_or(0);
+                let b = u8::from_str_radix(&hex[4..6], 16).unwrap_or(0);
+                (r, g, b)
+            }
+            _ => (255, 255, 255),
+        };
+        return if is_fg { format!("38;2;{r};{g};{b}") } else { format!("48;2;{r};{g};{b}") };
+    }
+
+    // Named colors → standard ANSI codes
+    let (base_fg, base_bg) = match s {
+        "black"          => (30, 40),
+        "red"            => (31, 41),
+        "green"          => (32, 42),
+        "yellow"         => (33, 43),
+        "blue"           => (34, 44),
+        "magenta" | "purple" => (35, 45),
+        "cyan"           => (36, 46),
+        "white"          => (37, 47),
+        "bright black"   => (90, 100),
+        "bright red"     => (91, 101),
+        "bright green"   => (92, 102),
+        "bright yellow"  => (93, 103),
+        "bright blue"    => (94, 104),
+        "bright magenta" | "bright purple" => (95, 105),
+        "bright cyan"    => (96, 106),
+        "bright white"   => (97, 107),
+        _ => return if is_fg { "37".to_string() } else { "47".to_string() }, // default white
+    };
+    (if is_fg { base_fg } else { base_bg }).to_string()
+}
 }
 
 // ============================================================
