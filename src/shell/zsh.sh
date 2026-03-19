@@ -21,32 +21,35 @@ promptorius_precmd() {
 
     # Auto-recompile if stale
     local script="${XDG_CONFIG_HOME:-$HOME/.config}/promptorius/config"
-    local binary="${XDG_DATA_HOME:-$HOME/.local/share}/promptorius/__promptorius_output"
     local compiler="$(command -v promptorius)"
+    _promptorius_binary="${XDG_DATA_HOME:-$HOME/.local/share}/promptorius/__promptorius_output"
 
-    if [[ ! -f "$binary" || "$script" -nt "$binary" || "$compiler" -nt "$binary" ]]; then
-        promptorius compile "$script" "$binary"
+    if [[ ! -f "$_promptorius_binary" || "$script" -nt "$_promptorius_binary" || "$compiler" -nt "$_promptorius_binary" ]]; then
+        promptorius compile "$script" "$_promptorius_binary"
     fi
 
-    _promptorius_vars=(
-        --var "exit_code:${exit_code}"
-        --var "duration:${duration_ms}"
-        --var "jobs:${job_count}"
+    # Store values for re-render on keymap change
+    _promptorius_exit_code=$exit_code
+    _promptorius_duration=$duration_ms
+    _promptorius_jobs=$job_count
+    _promptorius_keymap="${KEYMAP:-}"
+
+    promptorius_render
+}
+
+promptorius_render() {
+    [[ -f "$_promptorius_binary" ]] || return
+
+    local -a vars=(
+        --var "exit_code:${_promptorius_exit_code:-0}"
+        --var "duration:${_promptorius_duration:-0}"
+        --var "jobs:${_promptorius_jobs:-0}"
         --var "keymap:${_promptorius_keymap:-}"
         --var "shell:zsh"
         --var "shlvl:${SHLVL}"
     )
-    PROMPT="$($binary "${_promptorius_vars[@]}")"
-    RPROMPT="$($binary --right "${_promptorius_vars[@]}")"
-}
-
-promptorius_render() {
-    local binary="${XDG_DATA_HOME:-$HOME/.local/share}/promptorius/__promptorius_output"
-    [[ -f "$binary" ]] || return
-    _promptorius_vars[-4]="--var"
-    _promptorius_vars[-3]="keymap:${_promptorius_keymap:-}"
-    PROMPT="$($binary "${_promptorius_vars[@]}")"
-    RPROMPT="$($binary --right "${_promptorius_vars[@]}")"
+    PROMPT="$($_promptorius_binary "${vars[@]}")"
+    RPROMPT="$($_promptorius_binary --right "${vars[@]}")"
     zle reset-prompt 2>/dev/null
 }
 
