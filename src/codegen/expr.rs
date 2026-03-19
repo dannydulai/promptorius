@@ -248,6 +248,9 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
                 }
                 return format!("builtin_regex({})", ref_args.join(", "));
             }
+            "floor" => return format!("Value::Number(({}).to_num().floor())", arg_exprs.first().unwrap_or(&"Value::Null".to_string())),
+            "ceil" => return format!("Value::Number(({}).to_num().ceil())", arg_exprs.first().unwrap_or(&"Value::Null".to_string())),
+            "round" => return format!("Value::Number(({}).to_num().round())", arg_exprs.first().unwrap_or(&"Value::Null".to_string())),
             "string" => return format!("builtin_string({})", ref_args.join(", ")),
             "number" => return format!("builtin_number({})", ref_args.join(", ")),
             "array" => return format!("builtin_array({})", ref_args.join(", ")),
