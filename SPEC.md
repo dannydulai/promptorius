@@ -173,6 +173,14 @@ parts = "a,b,c".split(/,/)
 
 Flags: `i` (case-insensitive), `g` (global), `m` (multiline).
 
+Create regex from string with `regex(pattern)` or `regex(pattern, flags)`:
+
+```
+pattern = "^hello"
+re = regex(pattern, "i")
+re.test("Hello World")   # true
+```
+
 ## Script structure
 
 The script file is `$XDG_CONFIG_HOME/promptorius/config.prompt`.
