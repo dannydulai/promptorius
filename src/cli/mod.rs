@@ -123,8 +123,8 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     let (output, stats) =
         pipeline::render_with_stats(&cfg, &cmds, right, &script_dirs, &stdlib)?;
 
-    eprintln!("--- promptorius explain ---");
-    eprintln!();
+    println!("--- promptorius explain ---");
+    println!();
 
     // Per-segment breakdown, sorted by duration descending
     let mut segs = stats.segments.clone();
@@ -141,7 +141,7 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
         } else {
             "hidden".to_string()
         };
-        eprintln!(
+        println!(
             "  {:>7.2}ms  {:<20} compile={:.2}ms exec={:.2}ms  {}",
             total_ms, seg.name, compile_ms, exec_ms, status
         );
@@ -152,13 +152,13 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     let template_ms = stats.template_eval_us as f64 / 1000.0;
     let total_ms = stats.total_us as f64 / 1000.0;
 
-    eprintln!();
-    eprintln!("  {:>7.2}ms  engine setup", engine_ms);
-    eprintln!("  {:>7.2}ms  segments total", seg_total_ms);
-    eprintln!("  {:>7.2}ms  template eval", template_ms);
-    eprintln!("  {:>7.2}ms  total", total_ms);
-    eprintln!("---");
-    print!("{output}");
+    println!();
+    println!("  {:>7.2}ms  engine setup", engine_ms);
+    println!("  {:>7.2}ms  segments total", seg_total_ms);
+    println!("  {:>7.2}ms  template eval", template_ms);
+    println!("  {:>7.2}ms  total", total_ms);
+    println!("---");
+    println!("{output}");
     Ok(())
 }
 
