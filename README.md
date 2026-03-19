@@ -2,10 +2,7 @@
 
 A compiled shell prompt engine. Write your prompt in a simple scripting language, compile it to a native binary, get sub-millisecond rendering.
 
-```
-~/work/promptorius
-promptorius/ │                                      experiment1 ✎ ?
-```
+![screenshot](screenshot.png)
 
 ## Why
 

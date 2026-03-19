@@ -31,7 +31,6 @@ end
 
 function fish_prompt
     set -l exit_code $status
-    set -l pipestatus $pipestatus
     set -l duration "$CMD_DURATION$cmd_duration"
     set -l job_count (jobs -g 2>/dev/null | count)
     set -l keymap (__promptorius_keymap)
