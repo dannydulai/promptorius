@@ -1,6 +1,7 @@
 //! Token types for the Promptorius language.
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub struct Span {
     pub line: usize,
     pub col: usize,
@@ -13,6 +14,7 @@ pub struct Spanned {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum Token {
     // Literals
     Number(f64),

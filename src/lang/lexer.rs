@@ -497,7 +497,7 @@ impl Lexer {
                         }
                     }
                 }
-                Some(c) => {
+                Some(_) => {
                     expr.push(self.advance().unwrap());
                 }
             }
@@ -672,6 +672,7 @@ impl Lexer {
 
 /// Internal representation of backtick interpolation parts during lexing.
 #[derive(Debug)]
+#[allow(dead_code)]
 enum InterpLexPart {
     Literal(String),
     Expr(String),
@@ -700,13 +701,15 @@ fn encode_interp_parts(parts: &[InterpLexPart]) -> String {
     result
 }
 
+#[allow(dead_code)]
 /// Check if a string token is actually an encoded interpolation.
 pub fn is_interpolation(s: &str) -> bool {
     s.starts_with('\x01')
 }
 
+#[allow(dead_code)]
 /// Decode interpolation parts from an encoded string.
-pub fn decode_interp_parts(s: &str) -> Vec<InterpLexPart> {
+fn decode_interp_parts(s: &str) -> Vec<InterpLexPart> {
     let s = &s[1..]; // skip marker
     let mut parts = Vec::new();
     for chunk in s.split('\x00') {

@@ -46,6 +46,7 @@ pub fn compile(script_path: &Path, output_path: &Path) -> Result<(), CompileErro
     }
 }
 
+#[allow(dead_code)]
 /// Check if the output binary is stale relative to the script and compiler.
 pub fn is_stale(script_path: &Path, output_path: &Path) -> bool {
     if !output_path.exists() {

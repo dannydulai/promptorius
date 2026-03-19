@@ -3,13 +3,6 @@ mod codegen;
 mod compiler;
 mod lang;
 
-// Legacy modules (to be removed)
-mod config;
-mod host;
-mod pipeline;
-mod render;
-mod script;
-
 fn main() {
     let args = cli::parse();
     if let Err(e) = cli::run(args) {

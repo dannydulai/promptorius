@@ -573,22 +573,6 @@ impl Parser {
                     let span = self.span();
                     self.advance();
 
-                    // Check for range: expr..expr
-                    if self.at(&Token::Dot) {
-                        self.advance();
-                        let end = self.parse_unary()?;
-                        // Oops — DotDot should have been caught by the lexer.
-                        // Actually `expr.` then `.` means we consumed Dot then see Dot.
-                        // But the lexer emits DotDot for `..`, so this case is
-                        // `expr` `.` `field` — normal member access.
-                        // This shouldn't happen. Let me just handle member access.
-                        return Err(ParseError {
-                            msg: "unexpected '.'".to_string(),
-                            line: span.line,
-                            col: span.col,
-                        });
-                    }
-
                     let field = match self.peek().clone() {
                         Token::Ident(name) => {
                             self.advance();

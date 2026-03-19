@@ -1,5 +1,6 @@
 //! AST node types for the Promptorius language.
 
+#![allow(dead_code)]
 use crate::lang::token::Span;
 
 /// A complete program (top-level statements).
