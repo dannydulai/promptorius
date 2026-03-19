@@ -212,7 +212,7 @@ impl Scope {
 
 static mut COLOR_MAP: Option<HashMap<String, String>> = None;
 
-fn builtin_cs(val: &Value) {
+fn builtin_colors(val: &Value) {
     if let Value::Dict(d) = val {
         let mut map = HashMap::new();
         for (name, def) in d {
