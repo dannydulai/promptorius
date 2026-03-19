@@ -172,6 +172,26 @@ fn gen_literal(lit: &Literal) -> String {
 }
 
 fn gen_call(callee: &Expr, args: &[Expr]) -> String {
+    // Detect IIFE: fn(...) { body }() — inline the body as a block
+    if let Expr::Closure { params, body, .. } = callee {
+        let mut s = "{ ".to_string();
+        // Bind args to param names in scope
+        for (i, p) in params.iter().enumerate() {
+            if let Some(arg) = args.get(i) {
+                s.push_str(&format!(
+                    "scope.set(\"{p}\", {});",
+                    gen_expr(arg)
+                ));
+            }
+        }
+        for stmt in body {
+            s.push_str(&crate::codegen::stmt::gen_stmt(stmt));
+            s.push(' ');
+        }
+        s.push_str("Value::Null }");
+        return s;
+    }
+
     // Check for namespaced builtins: git.branch(), file.exists(), etc.
     if let Expr::Member { object, field, .. } = callee {
         if let Expr::Ident(ns, _) = object.as_ref() {
@@ -235,11 +255,10 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
             "spawn" => return format!("builtin_spawn({})", ref_args.join(", ")),
             "wait" => return format!("builtin_wait({})", ref_args.join(", ")),
             _ => {
-                // User-defined function call
+                // Dynamic dispatch: look up in scope, call if closure
+                let arg_list = arg_exprs.join(", ");
                 return format!(
-                    "user_fn_{}(&mut scope, {})",
-                    mangle_ident(name),
-                    arg_exprs.join(", ")
+                    "{{ let __callee = scope.get(\"{name}\"); match __callee {{ Value::Closure(ref f) => f(vec![{arg_list}]), _ => {{ eprintln!(\"promptorius: '{{}}' is not a function\", \"{name}\"); Value::Null }} }} }}"
                 );
             }
         }

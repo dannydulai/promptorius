@@ -8,11 +8,6 @@ use crate::lang::ast::*;
 pub fn generate(program: &Program) -> String {
     let mut output = String::new();
 
-    // Emit runtime
-    output.push_str(runtime::RUNTIME);
-    output.push('\n');
-
-    // Separate top-level fn defs from top-level statements
     let mut fn_defs = Vec::new();
     let mut top_stmts = Vec::new();
 
@@ -22,6 +17,10 @@ pub fn generate(program: &Program) -> String {
             _ => top_stmts.push(s),
         }
     }
+
+    // Emit runtime
+    output.push_str(runtime::RUNTIME);
+    output.push('\n');
 
     // Emit user functions
     for f in &fn_defs {
@@ -34,8 +33,27 @@ pub fn generate(program: &Program) -> String {
         }
     }
 
-    // Emit script_init (top-level statements)
+    // Emit script_init (top-level statements + register user functions in scope)
     output.push_str("fn script_init(scope: &mut Scope) {\n");
+
+    // Register user-defined functions as closures in scope
+    for f in &fn_defs {
+        if let Stmt::FnDef { name, params, .. } = f {
+            let n = params.len();
+            let mangled = mangle_ident(name);
+            output.push_str(&format!(
+                "    scope.set(\"{name}\", Value::Closure(Arc::new(move |__args: Vec<Value>| -> Value {{ \
+                    let mut __scope = Scope::new(); \
+                    user_fn_{mangled}(&mut __scope, {arg_unpack}) \
+                }})));\n",
+                arg_unpack = (0..n)
+                    .map(|i| format!("__args.get({i}).cloned().unwrap_or(Value::Null)"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ));
+        }
+    }
+
     for s in &top_stmts {
         output.push_str("    ");
         output.push_str(&stmt::gen_stmt(s));

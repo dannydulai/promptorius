@@ -178,6 +178,7 @@ fn value_gte(a: &Value, b: &Value) -> Value { Value::Bool(a.to_num() >= b.to_num
 // Scope
 // ============================================================
 
+#[derive(Clone)]
 struct Scope {
     vars: HashMap<String, Value>,
     parent: Option<Box<Scope>>,
