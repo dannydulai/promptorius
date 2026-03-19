@@ -258,7 +258,7 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
                 // Dynamic dispatch: look up in scope, call if closure
                 let arg_list = arg_exprs.join(", ");
                 return format!(
-                    "{{ let __callee = scope.get(\"{name}\"); match __callee {{ Value::Closure(ref f) => f(vec![{arg_list}]), _ => {{ eprintln!(\"promptorius: '{{}}' is not a function\", \"{name}\"); Value::Null }} }} }}"
+                    "{{ let __callee = scope.get(\"{name}\"); match __callee {{ Value::Closure(ref f) => f(vec![{arg_list}]), _ => {{ eprintln!(\"promptorius: '{{}}' is not a function\", \"{name}\"); std::process::exit(1); }} }} }}"
                 );
             }
         }
