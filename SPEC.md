@@ -87,19 +87,15 @@ warning = "yellow"
 error = { fg = "red", bold = true }
 muted = { fg = "bright_black", dim = true }
 
-[segments.directory]
-script = "directory.rhai"      # resolved from script_path
+# Segment blocks are optional. Calling s("foo") in the format string
+# will automatically look for foo.rhai — no [segments.foo] needed
+# unless you want to set a custom script path or pass config values.
 
 [segments.git]
-script = "git.rhai"
 # Arbitrary key-value pairs passed to the script as `config` map
 max_branch_len = 32
 
-[segments.language]
-script = "language.rhai"
-
 [segments.time]
-script = "time.rhai"
 format = "%H:%M"
 
 [settings]

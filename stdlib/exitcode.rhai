@@ -6,4 +6,4 @@ if code == 0 {
     return ();
 }
 
-color("error") + " Exited w/ " + code + " " + color("") + "\n"
+color("exitcode") + " Exited w/ " + code + " " + color("") + "\n"
