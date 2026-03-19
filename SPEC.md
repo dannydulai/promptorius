@@ -438,7 +438,7 @@ All variable names are valid — accessing an undefined variable returns `null`.
 | `duration` | Duration of last command in milliseconds |
 | `jobs` | Number of background jobs |
 | `keymap` | Vi keymap: `""` (insert/default), `"vicmd"` (normal) |
-| `shell` | Shell name: `"zsh"`, `"bash"`, `"fish"`, `"nu"` |
+| `shell` | Shell name: `"zsh"`, `"bash"`, `"fish"` |
 | `shlvl` | Shell nesting level |
 
 ## CLI
@@ -446,7 +446,7 @@ All variable names are valid — accessing an undefined variable returns `null`.
 ```
 promptorius compile                        # Compile config → default output
 promptorius compile <script> <output>      # Compile specific files
-promptorius init <shell>                   # Print shell init script (zsh, bash, fish, nushell)
+promptorius init <shell>                   # Print shell init script (zsh, bash, fish)
 promptorius check [script]                 # Validate script syntax
 promptorius explain [--right] [--var k:v]  # Build instrumented binary and show timing
 promptorius clean                          # Remove build directory
@@ -481,7 +481,7 @@ The binary is stale if:
 
 ## Shell integration
 
-Supported: zsh, bash, fish, nushell.
+Supported: zsh, bash, fish.
 
 The shell init script handles:
 - Staleness check and auto-recompile

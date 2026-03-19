@@ -35,7 +35,7 @@ Subcommands: `compile`, `clean`, `init`, `check`, `explain`, `completions`.
 
 ### `shell/` — Shell init scripts
 
-`zsh.sh`, `bash.sh`, `fish.fish`, `nushell.nu` — staleness check, auto-recompile, duration timing, job count, vi keymap, exit code suppression.
+`zsh.sh`, `bash.sh`, `fish.fish` — staleness check, auto-recompile, duration timing, job count, vi keymap, exit code suppression.
 
 ## Key invariants
 

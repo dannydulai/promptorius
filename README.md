@@ -36,10 +36,6 @@ eval "$(promptorius init bash)"
 
 # fish (~/.config/fish/config.fish)
 promptorius init fish | source
-
-# nushell
-promptorius init nushell | save -f ~/.config/nushell/promptorius.nu
-source ~/.config/nushell/promptorius.nu
 ```
 
 On first prompt, Promptorius creates a default config and compiles it. The first build takes ~30 seconds (downloading and compiling dependencies). After that, recompiles take 1-2 seconds and only happen when you edit the config.
