@@ -23,16 +23,27 @@ pub enum CompileError {
 pub fn compile(script_path: &Path, output_path: &Path) -> Result<(), CompileError> {
     eprint!("Promptorius needs to rebuild. Please wait a few seconds while this happens…");
 
-    let source = std::fs::read_to_string(script_path)?;
-    let program = Parser::parse(&source)?;
-    let rust_source = codegen::generate(&program);
-    let build_dir = project::ensure_build_project()?;
-    project::write_source(&build_dir, &rust_source)?;
-    project::build(&build_dir)?;
-    project::copy_binary(&build_dir, output_path)?;
+    let result = (|| -> Result<(), CompileError> {
+        let source = std::fs::read_to_string(script_path)?;
+        let program = Parser::parse(&source)?;
+        let rust_source = codegen::generate(&program);
+        let build_dir = project::ensure_build_project()?;
+        project::write_source(&build_dir, &rust_source)?;
+        project::build(&build_dir)?;
+        project::copy_binary(&build_dir, output_path)?;
+        Ok(())
+    })();
 
-    eprintln!(" done.");
-    Ok(())
+    match result {
+        Ok(()) => {
+            eprintln!(" done.");
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("\n\nBuild failed.\n\n{e}");
+            Err(e)
+        }
+    }
 }
 
 /// Check if the output binary is stale relative to the script and compiler.
