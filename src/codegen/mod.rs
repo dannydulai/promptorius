@@ -77,7 +77,11 @@ fn gen_fn_def(name: &str, params: &[String], body: &[Stmt]) -> String {
         s.push('\n');
     }
 
-    s.push_str("    Value::Null\n");
+    // Only append Value::Null if the last statement isn't a return
+    let ends_with_return = body.last().map(|s| matches!(s, Stmt::Return { .. })).unwrap_or(false);
+    if !ends_with_return {
+        s.push_str("    Value::Null\n");
+    }
     s.push_str("}\n");
     s
 }

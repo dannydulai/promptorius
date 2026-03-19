@@ -1,8 +1,11 @@
 mod cli;
 mod codegen;
+mod compiler;
+mod lang;
+
+// Legacy modules (to be removed)
 mod config;
 mod host;
-mod lang;
 mod pipeline;
 mod render;
 mod script;

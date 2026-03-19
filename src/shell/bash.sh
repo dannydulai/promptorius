@@ -20,7 +20,17 @@ __promptorius_prompt_command() {
     unset _promptorius_start
 
     local job_count=$(jobs -r | wc -l | tr -d ' ')
-    PS1="$(promptorius --cmd ":str:shell:bash" --cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}" --cmd ":int:jobs:${job_count}")"
+
+    # Auto-recompile if stale
+    local script="${XDG_CONFIG_HOME:-$HOME/.config}/promptorius/config"
+    local binary="${XDG_DATA_HOME:-$HOME/.local/share}/promptorius/__promptorius_output"
+    local compiler="$(command -v promptorius)"
+
+    if [[ ! -f "$binary" || "$script" -nt "$binary" || "$compiler" -nt "$binary" ]]; then
+        promptorius compile "$script" "$binary"
+    fi
+
+    PS1="$($binary --var "exit_code:${exit_code}" --var "duration:${duration_ms}" --var "jobs:${job_count}" --var "shell:bash" --var "shlvl:${SHLVL}")"
 }
 
 trap '__promptorius_timer_start' DEBUG

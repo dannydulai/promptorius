@@ -1,13 +1,17 @@
 $env.PROMPT_COMMAND = {||
     let exit_code = $env.LAST_EXIT_CODE? | default 0
     let duration = $env.CMD_DURATION_MS? | default "0"
-    let job_count = (jobs | length)
-    promptorius --cmd $":int:exit_code:($exit_code)" --cmd $":int:duration:($duration)" --cmd $":int:jobs:($job_count)"
+    let binary = ([$env.XDG_DATA_HOME? | default ($env.HOME + "/.local/share") "promptorius" "__promptorius_output"] | path join)
+    let script = ([$env.XDG_CONFIG_HOME? | default ($env.HOME + "/.config") "promptorius" "config"] | path join)
+
+    if (not ($binary | path exists)) or (($script | path stat).modified > ($binary | path stat).modified) {
+        promptorius compile $script $binary
+    }
+
+    ^$binary --var $"exit_code:($exit_code)" --var $"duration:($duration)" --var "shell:nu" --var $"shlvl:($env.SHLVL? | default 1)"
 }
 
 $env.PROMPT_COMMAND_RIGHT = {||
-    let exit_code = $env.LAST_EXIT_CODE? | default 0
-    let duration = $env.CMD_DURATION_MS? | default "0"
-    let job_count = (jobs | length)
-    promptorius --right --cmd $":int:exit_code:($exit_code)" --cmd $":int:duration:($duration)" --cmd $":int:jobs:($job_count)"
+    let binary = ([$env.XDG_DATA_HOME? | default ($env.HOME + "/.local/share") "promptorius" "__promptorius_output"] | path join)
+    ^$binary --right --var "shell:nu" --var $"shlvl:($env.SHLVL? | default 1)"
 }

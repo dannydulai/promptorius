@@ -387,7 +387,8 @@ fn builtin_file_write(path: &Value, content: &Value) -> Value {
 }
 
 fn builtin_file_type(path: &Value) -> Value {
-    let p = std::path::Path::new(&path.to_str());
+    let path_str = path.to_str();
+    let p = std::path::Path::new(&path_str);
     if !p.exists() { return Value::Str("none".to_string()); }
     if p.is_symlink() { return Value::Str("symlink".to_string()); }
     if p.is_dir() { return Value::Str("dir".to_string()); }
