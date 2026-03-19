@@ -5,15 +5,15 @@ promptorius_precmd() {
         local elapsed=$(( EPOCHREALTIME - _promptorius_start ))
         duration_ms=$(( ${elapsed%.*} * 1000 + 10#${${elapsed#*.}:0:3} ))
     fi
-    _promptorius_cmd_args="--cmd :int:exit_code:${exit_code} --cmd :int:duration:${duration_ms}"
+    _promptorius_cmd_args=(--cmd ":int:exit_code:${exit_code}" --cmd ":int:duration:${duration_ms}")
     _promptorius_keymap="${KEYMAP:-}"
     promptorius_render
 }
 
 promptorius_render() {
-    local cmd_args="${_promptorius_cmd_args} --cmd :str:keymap:${_promptorius_keymap}"
-    PROMPT="$(promptorius $cmd_args)"
-    RPROMPT="$(promptorius --right $cmd_args)"
+    local -a cmd_args=("${_promptorius_cmd_args[@]}" --cmd ":str:keymap:${_promptorius_keymap}")
+    PROMPT="$(promptorius "${cmd_args[@]}")"
+    RPROMPT="$(promptorius --right "${cmd_args[@]}")"
     zle reset-prompt 2>/dev/null
 }
 
