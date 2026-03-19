@@ -226,25 +226,25 @@ colors = {
     char_vicmd: "#ff40c0",
     git_branch: "#e89050",
 }
-setcolors(colors)
+colors(colors)
 
 # Helper functions
 fn git_prompt() {
     if (!git.is_repo()) { return "" }
-    return color("git_branch") + " " + git.branch() + color("")
+    return C("git_branch") + " " + git.branch() + C("")
 }
 
 # Required: return the left prompt string
 fn left_prompt() {
-    dir = color("directory") + cwd().replace(env("HOME"), "~") + color("")
+    dir = C("directory") + cwd().replace(env("HOME"), "~") + C("")
     char = env("USER") == "root" ? "#" : "│"
     col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
 
     result = ""
     if (exit_code != 0) {
-        result += color("error") + "Exited w/ " + exit_code + color("") + "\n"
+        result += C("error") + "Exited w/ " + exit_code + C("") + "\n"
     }
-    result += dir + " " + color(col) + char + color("") + " "
+    result += dir + " " + C(col) + char + C("") + " "
     return result
 }
 
@@ -317,8 +317,8 @@ pct = results[1]
 
 | Function | Returns | Description |
 |---|---|---|
-| `setcolors(dict)` | null | Set the color palette |
-| `color(name)` | string | Emit ANSI escape for named color. `color("")` resets all formatting. |
+| `colors(dict)` | null | Set the color palette |
+| `C(name)` | string | Emit ANSI escape for named color. `C("")` resets all formatting. |
 
 Each entry in the `setcolors` dict is either a simple string (foreground only) or a dict:
 
@@ -563,7 +563,7 @@ colors = {
     # battery_low: "#ff8800",
     # battery_critical: { fg: "red", bold: true },
 }
-setcolors(colors)
+colors(colors)
 
 # --- Left prompt ---
 fn left_prompt() {
@@ -571,16 +571,16 @@ fn left_prompt() {
 
     # Show non-zero exit code
     if (exit_code != 0) {
-        result += color("error") + "Exited w/ " + exit_code + color("") + "\n"
+        result += C("error") + "Exited w/ " + exit_code + C("") + "\n"
     }
 
     # Directory
-    result += color("directory") + cwd().replace(env("HOME"), "~") + color("")
+    result += C("directory") + cwd().replace(env("HOME"), "~") + C("")
 
     # Prompt character: │ for user, # for root, repeated SHLVL times
     char = env("USER") == "root" ? "#" : "│"
     col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
-    result += " " + color(col) + char.repeat(shlvl) + color("") + " "
+    result += " " + C(col) + char.repeat(shlvl) + C("") + " "
 
     return result
 }
@@ -588,7 +588,7 @@ fn left_prompt() {
 # --- Right prompt ---
 fn right_prompt() {
     if (!git.is_repo()) { return "" }
-    return color("git_branch") + " " + git.branch() + color("")
+    return C("git_branch") + " " + git.branch() + C("")
 }
 
 # --- Uncomment below for more features ---
@@ -598,15 +598,15 @@ fn right_prompt() {
 #     branch = git.branch()
 #     s = git.status()
 #     indicators = ""
-#     if (s.staged > 0)    { indicators += color("git_staged") + " +" }
-#     if (s.modified > 0)  { indicators += color("git_modified") + " ✎" }
-#     if (s.untracked > 0) { indicators += color("git_untracked") + " ?" }
-#     if (s.conflicts > 0) { indicators += color("error") + " ✘" }
-#     if (indicators != "") { indicators += color("") }
+#     if (s.staged > 0)    { indicators += C("git_staged") + " +" }
+#     if (s.modified > 0)  { indicators += C("git_modified") + " ✎" }
+#     if (s.untracked > 0) { indicators += C("git_untracked") + " ?" }
+#     if (s.conflicts > 0) { indicators += C("error") + " ✘" }
+#     if (indicators != "") { indicators += C("") }
 #     remote = ""
 #     if (s.ahead > 0)  { remote += " ↑" + s.ahead }
 #     if (s.behind > 0) { remote += " ↓" + s.behind }
-#     return color("git_branch") + " " + branch + indicators + remote + color("")
+#     return C("git_branch") + " " + branch + indicators + remote + C("")
 # }
 
 # fn battery_prompt() {
@@ -617,7 +617,7 @@ fn right_prompt() {
 #     col = pct <= 10 ? "battery_critical" : pct <= 25 ? "battery_low" : "battery_normal"
 #     icon = pct > 75 ? "█" : pct > 50 ? "▆" : pct > 25 ? "▄" : pct > 10 ? "▂" : "▁"
 #     suffix = state == "charging" ? "⚡" : ""
-#     return color(col) + icon + " " + pct + "%" + suffix + color("")
+#     return C(col) + icon + " " + pct + "%" + suffix + C("")
 # }
 ```
 

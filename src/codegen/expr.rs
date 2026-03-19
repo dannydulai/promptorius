@@ -237,8 +237,8 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
             "cwd" => return "builtin_cwd()".to_string(),
             "os" => return "builtin_os()".to_string(),
             "eprint" => return format!("{{ builtin_eprint({}); Value::Null }}", ref_args.join(", ")),
-            "setcolors" => return format!("{{ builtin_setcolors({}); Value::Null }}", ref_args.join(", ")),
-            "color" => return format!("builtin_color({})", ref_args.join(", ")),
+            "colors" => return format!("{{ builtin_colors({}); Value::Null }}", ref_args.join(", ")),
+            "C" => return format!("builtin_c({})", ref_args.join(", ")),
             "exec" => return format!("builtin_exec({})", ref_args.join(", ")),
             "exec_ok" => return format!("builtin_exec_ok({})", ref_args.join(", ")),
             "regex" => {

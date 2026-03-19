@@ -2,7 +2,7 @@
 # https://github.com/user/promptorius
 
 # --- Colors ---
-colors = {
+colors({
     directory: "#6ec2e8",
     error: { fg: "red", bold: true },
     char_normal: "#666",
@@ -14,8 +14,7 @@ colors = {
     # battery_normal: "green",
     # battery_low: "#ff8800",
     # battery_critical: { fg: "red", bold: true },
-}
-setcolors(colors)
+})
 
 # --- Left prompt ---
 fn left_prompt() {
@@ -23,18 +22,21 @@ fn left_prompt() {
 
     # Show non-zero exit code
     if (exit_code != 0) {
-        result += color("error") + "Exited w/ " + exit_code + color("") + "\n"
+        result += `{C("error")}Exited w/ {exit_code}{C("")}\n`
     }
 
     # Directory
-    result += color("directory") + cwd().replace(env("HOME"), "~") + color("")
+    dir = cwd()
+    home = env("HOME")
+    display = dir.starts_with(home) ? `~{dir.slice(home.len(), null)}` : dir
+    result += `{C("directory")}{display}{C("")}`
 
     # Prompt character
     char = env("USER") == "root" ? "#" : "│"
     col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
     lvl = number(shlvl)
     if (lvl < 1) { lvl = 1 }
-    result += " " + color(col) + char.repeat(lvl) + color("") + " "
+    result += ` {C(col)}{char.repeat(lvl)}{C("")} `
 
     return result
 }
@@ -42,7 +44,7 @@ fn left_prompt() {
 # --- Right prompt ---
 fn right_prompt() {
     if (!git.is_repo()) { return "" }
-    return color("git_branch") + " " + git.branch() + color("")
+    return `{C("git_branch")} {git.branch()}{C("")}`
 }
 
 # --- Uncomment below for more features ---
@@ -52,15 +54,15 @@ fn right_prompt() {
 #     branch = git.branch()
 #     s = git.status()
 #     indicators = ""
-#     if (s.staged > 0)    { indicators += color("git_staged") + " +" }
-#     if (s.modified > 0)  { indicators += color("git_modified") + " ✎" }
-#     if (s.untracked > 0) { indicators += color("git_untracked") + " ?" }
-#     if (s.conflicts > 0) { indicators += color("error") + " ✘" }
-#     if (indicators != "") { indicators += color("") }
+#     if (s.staged > 0)    { indicators += `{C("git_staged")} +` }
+#     if (s.modified > 0)  { indicators += `{C("git_modified")} ✎` }
+#     if (s.untracked > 0) { indicators += `{C("git_untracked")} ?` }
+#     if (s.conflicts > 0) { indicators += `{C("error")} ✘` }
+#     if (indicators != "") { indicators += C("") }
 #     remote = ""
-#     if (s.ahead > 0)  { remote += " ↑" + s.ahead }
-#     if (s.behind > 0) { remote += " ↓" + s.behind }
-#     return color("git_branch") + " " + branch + indicators + remote + color("")
+#     if (s.ahead > 0)  { remote += ` ↑{s.ahead}` }
+#     if (s.behind > 0) { remote += ` ↓{s.behind}` }
+#     return `{C("git_branch")} {branch}{C("")}{indicators}{remote}`
 # }
 
 # fn battery_prompt() {
@@ -71,5 +73,5 @@ fn right_prompt() {
 #     col = pct <= 10 ? "battery_critical" : pct <= 25 ? "battery_low" : "battery_normal"
 #     icon = pct > 75 ? "█" : pct > 50 ? "▆" : pct > 25 ? "▄" : pct > 10 ? "▂" : "▁"
 #     suffix = state == "charging" ? "⚡" : ""
-#     return color(col) + icon + " " + pct + "%" + suffix + color("")
+#     return `{C(col)}{icon} {pct}%{suffix}{C("")}`
 # }

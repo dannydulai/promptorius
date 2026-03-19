@@ -213,11 +213,11 @@ fn right_prompt() {
 colors = {
     error: { fg: "red", bold: true },
 }
-setcolors(colors)
+colors(colors)
 
 fn left_prompt() {
     if (exit_code != 0) {
-        return color("error") + "err" + color("")
+        return C("error") + "err" + C("")
     }
     return cwd()
 }
@@ -229,8 +229,8 @@ fn right_prompt() {
         let program = Parser::parse(src).unwrap();
         let output = generate(&program);
 
-        assert!(output.contains("builtin_setcolors"));
-        assert!(output.contains("builtin_color"));
+        assert!(output.contains("builtin_colors"));
+        assert!(output.contains("builtin_c"));
         assert!(output.contains("builtin_cwd"));
         assert!(output.contains("builtin_git_is_repo"));
         assert!(output.contains("builtin_git_branch"));

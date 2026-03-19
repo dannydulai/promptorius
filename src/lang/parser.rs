@@ -1097,27 +1097,27 @@ colors = {
     error: { fg: "red", bold: true },
     char_normal: "#666",
 }
-setcolors(colors)
+colors(colors)
 
 fn left_prompt() {
     result = ""
     if (exit_code != 0) {
-        result += color("error") + "Exited w/ " + exit_code + color("") + "\n"
+        result += C("error") + "Exited w/ " + exit_code + C("") + "\n"
     }
-    result += color("directory") + cwd().replace(env("HOME"), "~") + color("")
+    result += C("directory") + cwd().replace(env("HOME"), "~") + C("")
     char = env("USER") == "root" ? "#" : "│"
     col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
-    result += " " + color(col) + char + color("") + " "
+    result += " " + C(col) + char + C("") + " "
     return result
 }
 
 fn right_prompt() {
     if (!git.is_repo()) { return "" }
-    return color("git_branch") + " " + git.branch() + color("")
+    return C("git_branch") + " " + git.branch() + C("")
 }
 "##;
         let prog = parse(src);
-        // Should have: colors assignment, setcolors call, left_prompt fn, right_prompt fn
+        // Should have: colors assignment, colors() call, left_prompt fn, right_prompt fn
         assert!(prog.stmts.len() >= 4, "expected at least 4 top-level stmts, got {}", prog.stmts.len());
     }
 }
