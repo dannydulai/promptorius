@@ -158,7 +158,6 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     println!("  {:>7.2}ms  template eval", template_ms);
     println!("  {:>7.2}ms  total", total_ms);
     println!("---");
-    println!("{output}");
     Ok(())
 }
 
