@@ -805,6 +805,30 @@ fn value_member_access(obj: &Value, field: &str) -> Value {
     }
 }
 
+fn value_set_member(obj: &mut Value, field: &str, val: Value) {
+    if let Value::Dict(d) = obj {
+        d.insert(field.to_string(), val);
+    }
+}
+
+fn value_set_index(obj: &mut Value, idx: &Value, val: Value) {
+    match obj {
+        Value::Array(arr) => {
+            let i = idx.to_num() as usize;
+            if i < arr.len() {
+                arr[i] = val;
+            } else {
+                while arr.len() < i { arr.push(Value::Null); }
+                arr.push(val);
+            }
+        }
+        Value::Dict(d) => {
+            d.insert(idx.to_str(), val);
+        }
+        _ => {}
+    }
+}
+
 fn value_index(obj: &Value, idx: &Value) -> Value {
     match obj {
         Value::Array(arr) => {

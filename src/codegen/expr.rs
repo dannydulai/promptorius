@@ -283,12 +283,23 @@ fn gen_assignment(target: &Expr, value: &Expr) -> String {
             format!("{{ let __v = {val}; scope.set(\"{name}\", __v.clone()); __v }}")
         }
         Expr::Member { object, field, .. } => {
-            // obj.field = value — not supported for arbitrary objects in this simple model
-            // For dicts: we'd need mutable access
-            format!("{{ let __v = {val}; /* TODO: member assign {field} */ __v }}")
+            if let Expr::Ident(obj_name, _) = object.as_ref() {
+                format!(
+                    "{{ let __v = {val}; let mut __obj = scope.get(\"{obj_name}\"); value_set_member(&mut __obj, \"{field}\", __v.clone()); scope.set(\"{obj_name}\", __obj); __v }}"
+                )
+            } else {
+                format!("{{ {val} }}")
+            }
         }
         Expr::Index { object, index, .. } => {
-            format!("{{ let __v = {val}; /* TODO: index assign */ __v }}")
+            if let Expr::Ident(obj_name, _) = object.as_ref() {
+                let idx = gen_expr(index);
+                format!(
+                    "{{ let __v = {val}; let __idx = {idx}; let mut __obj = scope.get(\"{obj_name}\"); value_set_index(&mut __obj, &__idx, __v.clone()); scope.set(\"{obj_name}\", __obj); __v }}"
+                )
+            } else {
+                format!("{{ {val} }}")
+            }
         }
         _ => format!("{{ {val} }}"),
     }
@@ -310,6 +321,25 @@ fn gen_compound_assignment(op: &BinOp, target: &Expr, value: &Expr) -> String {
             format!(
                 "{{ let __v = {func}(&scope.get(\"{name}\"), &{val}); scope.set(\"{name}\", __v.clone()); __v }}"
             )
+        }
+        Expr::Member { object, field, .. } => {
+            if let Expr::Ident(obj_name, _) = object.as_ref() {
+                format!(
+                    "{{ let mut __obj = scope.get(\"{obj_name}\"); let __old = value_member_access(&__obj, \"{field}\"); let __v = {func}(&__old, &{val}); value_set_member(&mut __obj, \"{field}\", __v.clone()); scope.set(\"{obj_name}\", __obj); __v }}"
+                )
+            } else {
+                format!("{{ {val} }}")
+            }
+        }
+        Expr::Index { object, index, .. } => {
+            if let Expr::Ident(obj_name, _) = object.as_ref() {
+                let idx = gen_expr(index);
+                format!(
+                    "{{ let mut __obj = scope.get(\"{obj_name}\"); let __idx = {idx}; let __old = value_index(&__obj, &__idx); let __v = {func}(&__old, &{val}); value_set_index(&mut __obj, &__idx, __v.clone()); scope.set(\"{obj_name}\", __obj); __v }}"
+                )
+            } else {
+                format!("{{ {val} }}")
+            }
         }
         _ => format!("{{ {val} }}"),
     }
