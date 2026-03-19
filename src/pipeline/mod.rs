@@ -1,17 +1,16 @@
-//! Segment pipeline: lazy segment execution and format template evaluation.
+//! Segment pipeline: two-pass execution and format template evaluation.
 //!
-//! Segments are only executed when `s("name")` is called from the format template.
-//! Results are cached so repeated `s()` calls for the same segment are free.
+//! Pass 1: Parse the format template to find s("name") calls, then execute
+//!         those segments using a shared engine (one engine setup for all segments).
+//! Pass 2: Evaluate the format template with segment results available via s().
 
 mod template;
 
 use crate::config::Config;
 use crate::host;
 use crate::script::ScriptEngine;
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::Instant;
 use thiserror::Error;
 
@@ -28,7 +27,9 @@ pub enum PipelineError {
 #[derive(Debug, Clone)]
 pub struct SegmentTiming {
     pub name: String,
-    pub duration_us: u128,
+    pub compile_us: u128,
+    pub exec_us: u128,
+    pub total_us: u128,
     pub output_len: usize,
     pub had_output: bool,
     pub error: Option<String>,
@@ -37,12 +38,13 @@ pub struct SegmentTiming {
 /// Stats collected during a render.
 #[derive(Debug, Clone)]
 pub struct RenderStats {
+    pub engine_setup_us: u128,
     pub segments: Vec<SegmentTiming>,
     pub template_eval_us: u128,
     pub total_us: u128,
 }
 
-/// Render a prompt string from config, lazily executing segments as `s()` is called.
+/// Render a prompt string.
 pub fn render(
     config: &Config,
     cmds: &[host::CmdDef],
@@ -54,7 +56,7 @@ pub fn render(
     Ok(output)
 }
 
-/// Render a prompt and return timing stats for each segment.
+/// Render a prompt and return timing stats.
 pub fn render_with_stats(
     config: &Config,
     cmds: &[host::CmdDef],
@@ -72,77 +74,123 @@ pub fn render_with_stats(
 
     if format_str.is_empty() {
         return Ok((String::new(), RenderStats {
+            engine_setup_us: 0,
             segments: vec![],
             template_eval_us: 0,
             total_us: 0,
         }));
     }
 
-    // Set up the eval engine for the format template
-    let mut eval_engine = ScriptEngine::new();
-    host::register_all(&mut eval_engine, config, cmds);
-
-    // Cache for lazily-evaluated segment results
-    let cache: Rc<RefCell<HashMap<String, String>>> =
-        Rc::new(RefCell::new(HashMap::new()));
-
-    // Timing log
-    let timings: Rc<RefCell<Vec<SegmentTiming>>> =
-        Rc::new(RefCell::new(Vec::new()));
-
-    // Clone what s() needs into its closure
-    let segments = config.segments.clone();
-    let colors = config.colors.clone();
-    let cmds_owned: Vec<host::CmdDef> = cmds.to_vec();
-    let dirs_owned: Vec<PathBuf> = script_dirs.to_vec();
+    // Pre-resolve stdlib into owned strings
     let stdlib_owned: HashMap<String, String> = stdlib_scripts
         .iter()
         .map(|(k, v)| (k.clone(), v.to_string()))
         .collect();
-    let cache_clone = cache.clone();
-    let timings_clone = timings.clone();
 
-    eval_engine
+    // Pass 1: Extract segment names from the format template
+    let segment_names = template::extract_segment_names(format_str);
+
+    // Set up one shared engine with all host functions
+    let engine_start = Instant::now();
+    let mut engine = ScriptEngine::new();
+    host::register_all(&mut engine, config, cmds);
+    let engine_setup_us = engine_start.elapsed().as_micros();
+
+    // Execute each segment with the shared engine
+    let mut results: HashMap<String, String> = HashMap::new();
+    let mut timings: Vec<SegmentTiming> = Vec::new();
+
+    for name in &segment_names {
+        let seg_config = config.segments.get(name.as_str());
+        let default_script = format!("{name}.rhai");
+        let script_name = seg_config
+            .and_then(|s| s.script.as_deref())
+            .unwrap_or(&default_script);
+
+        let source = match resolve_script(script_name, script_dirs, &stdlib_owned) {
+            Some(s) => s,
+            None => {
+                let msg = format!("script not found: {script_name}");
+                eprintln!("promptorius: {msg}");
+                timings.push(SegmentTiming {
+                    name: name.clone(),
+                    compile_us: 0,
+                    exec_us: 0,
+                    total_us: 0,
+                    output_len: 0,
+                    had_output: false,
+                    error: Some(msg),
+                });
+                continue;
+            }
+        };
+
+        // Compile
+        let compile_start = Instant::now();
+        let ast = match engine.compile_source(&source) {
+            Ok(ast) => ast,
+            Err(e) => {
+                let msg = format!("{script_name}: {e}");
+                eprintln!("promptorius: {msg}");
+                timings.push(SegmentTiming {
+                    name: name.clone(),
+                    compile_us: compile_start.elapsed().as_micros(),
+                    exec_us: 0,
+                    total_us: compile_start.elapsed().as_micros(),
+                    output_len: 0,
+                    had_output: false,
+                    error: Some(msg),
+                });
+                continue;
+            }
+        };
+        let compile_us = compile_start.elapsed().as_micros();
+
+        // Execute with per-segment scope
+        let empty = HashMap::new();
+        let extra = seg_config.map(|s| &s.extra).unwrap_or(&empty);
+        let mut scope = host::segment_scope(extra);
+
+        let exec_start = Instant::now();
+        let (output, error) = match engine.eval_ast_with_scope(&ast, &mut scope) {
+            Ok(Some(s)) => (s, None),
+            Ok(None) => (String::new(), None),
+            Err(e) => {
+                let msg = format!("{script_name}: {e}");
+                eprintln!("promptorius: {msg}");
+                (String::new(), Some(msg))
+            }
+        };
+        let exec_us = exec_start.elapsed().as_micros();
+
+        let had_output = !output.is_empty();
+        let output_len = output.len();
+        results.insert(name.clone(), output);
+
+        timings.push(SegmentTiming {
+            name: name.clone(),
+            compile_us,
+            exec_us,
+            total_us: compile_us + exec_us,
+            output_len,
+            had_output,
+            error,
+        });
+    }
+
+    // Pass 2: Evaluate the format template with s() returning cached results
+    let template_start = Instant::now();
+
+    // Register s() that just does a lookup
+    let results_clone = results.clone();
+    engine
         .engine_mut()
         .register_fn("s", move |name: &str| -> String {
-            // Return cached result if already executed
-            if let Some(result) = cache_clone.borrow().get(name) {
-                return result.clone();
-            }
-
-            let start = Instant::now();
-
-            // Resolve and execute the segment
-            let (output, error) = execute_segment_timed(
-                name,
-                &segments,
-                &colors,
-                &cmds_owned,
-                &dirs_owned,
-                &stdlib_owned,
-            );
-
-            let elapsed = start.elapsed().as_micros();
-            let result = output.unwrap_or_default();
-
-            timings_clone.borrow_mut().push(SegmentTiming {
-                name: name.to_string(),
-                duration_us: elapsed,
-                output_len: result.len(),
-                had_output: !result.is_empty(),
-                error,
-            });
-
-            cache_clone
-                .borrow_mut()
-                .insert(name.to_string(), result.clone());
-            result
+            results_clone.get(name).cloned().unwrap_or_default()
         });
 
-    // Parse and evaluate the format template
-    let template_start = Instant::now();
-    let output = template::evaluate(format_str, &eval_engine)?;
-    let template_us = template_start.elapsed().as_micros();
+    let output = template::evaluate(format_str, &engine)?;
+    let template_eval_us = template_start.elapsed().as_micros();
 
     // Add newline prefix if configured
     let output = if !right && config.prompt.add_newline {
@@ -160,75 +208,14 @@ pub fn render_with_stats(
 
     let total_us = total_start.elapsed().as_micros();
 
-    // Subtract segment times from template time to get pure template eval
-    let segment_total_us: u128 = timings.borrow().iter().map(|t| t.duration_us).sum();
-    let pure_template_us = template_us.saturating_sub(segment_total_us);
-
     let stats = RenderStats {
-        segments: timings.borrow().clone(),
-        template_eval_us: pure_template_us,
+        engine_setup_us,
+        segments: timings,
+        template_eval_us,
         total_us,
     };
 
     Ok((output, stats))
-}
-
-/// Execute a single segment, returning output and optional error message.
-fn execute_segment_timed(
-    name: &str,
-    segments: &HashMap<String, crate::config::SegmentConfig>,
-    colors: &HashMap<String, crate::config::ColorDef>,
-    cmds: &[host::CmdDef],
-    script_dirs: &[PathBuf],
-    stdlib_scripts: &HashMap<String, String>,
-) -> (Option<String>, Option<String>) {
-    let seg_config = segments.get(name);
-    let default_script = format!("{name}.rhai");
-    let script_name = seg_config
-        .and_then(|s| s.script.as_deref())
-        .unwrap_or(&default_script);
-
-    let script_source = match resolve_script(script_name, script_dirs, stdlib_scripts) {
-        Some(s) => s,
-        None => return (None, Some(format!("script not found: {script_name}"))),
-    };
-
-    // Build a minimal config just for host registration
-    let config_for_host = crate::config::Config {
-        prompt: crate::config::PromptConfig {
-            format: String::new(),
-            right_format: None,
-            add_newline: false,
-        },
-        colors: colors.clone(),
-        segments: HashMap::new(),
-        settings: crate::config::Settings::default(),
-    };
-
-    let mut engine = ScriptEngine::new();
-    host::register_all(&mut engine, &config_for_host, cmds);
-
-    // Build scope with segment-specific config map
-    let empty = HashMap::new();
-    let extra = seg_config.map(|s| &s.extra).unwrap_or(&empty);
-    let mut scope = host::segment_scope(extra);
-
-    let ast = match engine.compile_source(&script_source) {
-        Ok(ast) => ast,
-        Err(e) => {
-            let msg = format!("{script_name}: {e}");
-            eprintln!("promptorius: {msg}");
-            return (None, Some(msg));
-        }
-    };
-    match engine.eval_ast_with_scope(&ast, &mut scope) {
-        Ok(result) => (result, None),
-        Err(e) => {
-            let msg = format!("{script_name}: {e}");
-            eprintln!("promptorius: {msg}");
-            (None, Some(msg))
-        }
-    }
 }
 
 /// Wrap ANSI escape sequences for shell-specific prompt rendering.

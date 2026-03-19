@@ -124,10 +124,12 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
 
     // Per-segment breakdown, sorted by duration descending
     let mut segs = stats.segments.clone();
-    segs.sort_by(|a, b| b.duration_us.cmp(&a.duration_us));
+    segs.sort_by(|a, b| b.total_us.cmp(&a.total_us));
 
     for seg in &segs {
-        let ms = seg.duration_us as f64 / 1000.0;
+        let total_ms = seg.total_us as f64 / 1000.0;
+        let compile_ms = seg.compile_us as f64 / 1000.0;
+        let exec_ms = seg.exec_us as f64 / 1000.0;
         let status = if let Some(err) = &seg.error {
             format!("ERROR: {err}")
         } else if seg.had_output {
@@ -135,14 +137,19 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
         } else {
             "hidden".to_string()
         };
-        eprintln!("  {:>7.2}ms  {:<20} {}", ms, seg.name, status);
+        eprintln!(
+            "  {:>7.2}ms  {:<20} compile={:.2}ms exec={:.2}ms  {}",
+            total_ms, seg.name, compile_ms, exec_ms, status
+        );
     }
 
-    let seg_total_ms = segs.iter().map(|s| s.duration_us).sum::<u128>() as f64 / 1000.0;
+    let seg_total_ms = segs.iter().map(|s| s.total_us).sum::<u128>() as f64 / 1000.0;
+    let engine_ms = stats.engine_setup_us as f64 / 1000.0;
     let template_ms = stats.template_eval_us as f64 / 1000.0;
     let total_ms = stats.total_us as f64 / 1000.0;
 
     eprintln!();
+    eprintln!("  {:>7.2}ms  engine setup", engine_ms);
     eprintln!("  {:>7.2}ms  segments total", seg_total_ms);
     eprintln!("  {:>7.2}ms  template eval", template_ms);
     eprintln!("  {:>7.2}ms  total", total_ms);
