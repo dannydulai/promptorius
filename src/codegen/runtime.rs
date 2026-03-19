@@ -617,26 +617,48 @@ fn builtin_spawn(closure: &Value) -> Value {
     Value::Future(result)
 }
 
-fn builtin_wait(futures: &Value) -> Value {
-    let arr = futures.to_array();
-    let mut results = Vec::new();
-    for f in &arr {
-        if let Value::Future(result) = f {
-            // Spin until result is ready
-            loop {
-                let guard = result.lock().unwrap();
-                if guard.is_some() {
-                    results.push(guard.clone().unwrap());
-                    break;
+fn builtin_wait(input: &Value) -> Value {
+    match input {
+        Value::Dict(d) => {
+            let mut results = HashMap::new();
+            for (key, val) in d {
+                if let Value::Future(result) = val {
+                    loop {
+                        let guard = result.lock().unwrap();
+                        if guard.is_some() {
+                            results.insert(key.clone(), guard.clone().unwrap());
+                            break;
+                        }
+                        drop(guard);
+                        thread::yield_now();
+                    }
+                } else {
+                    results.insert(key.clone(), val.clone());
                 }
-                drop(guard);
-                thread::yield_now();
             }
-        } else {
-            results.push(f.clone());
+            Value::Dict(results)
         }
+        Value::Array(arr) => {
+            let mut results = Vec::new();
+            for f in arr {
+                if let Value::Future(result) = f {
+                    loop {
+                        let guard = result.lock().unwrap();
+                        if guard.is_some() {
+                            results.push(guard.clone().unwrap());
+                            break;
+                        }
+                        drop(guard);
+                        thread::yield_now();
+                    }
+                } else {
+                    results.push(f.clone());
+                }
+            }
+            Value::Array(results)
+        }
+        _ => input.clone(),
     }
-    Value::Array(results)
 }
 
 // --- Method dispatch ---

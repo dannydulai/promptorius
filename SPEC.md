@@ -286,15 +286,16 @@ fn right_prompt() {
 | Function | Returns | Description |
 |---|---|---|
 | `spawn(closure)` | future | Run a closure on the thread pool, returns a future |
-| `wait(futures)` | array | Wait for an array of futures to resolve, returns array of results |
+| `wait(input)` | dict or array | Wait for futures to resolve. Accepts a dict or array, returns same shape with resolved values. |
 
 ```
 # Run git and battery checks in parallel
-f1 = spawn(fn() { return git.branch() })
-f2 = spawn(fn() { return battery.pct() })
-results = wait([f1, f2])
-branch = results[0]
-pct = results[1]
+results = wait({
+    branch: spawn(fn() { return git.branch() }),
+    pct: spawn(fn() { return battery.pct() }),
+})
+results.branch   # "main"
+results.pct      # 85
 ```
 
 ### Command execution
