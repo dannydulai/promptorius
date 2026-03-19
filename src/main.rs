@@ -1,4 +1,5 @@
 mod cli;
+mod codegen;
 mod config;
 mod host;
 mod lang;

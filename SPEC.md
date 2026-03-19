@@ -291,8 +291,8 @@ fn right_prompt() {
 
 ```
 # Run git and battery checks in parallel
-f1 = spawn(fn() { git.branch() })
-f2 = spawn(fn() { battery.pct() })
+f1 = spawn(fn() { return git.branch() })
+f2 = spawn(fn() { return battery.pct() })
 results = wait([f1, f2])
 branch = results[0]
 pct = results[1]
