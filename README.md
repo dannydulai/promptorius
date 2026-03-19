@@ -9,7 +9,7 @@ promptorius/ │                                      experiment1 ✎ ?
 
 ## Why
 
-Most prompt tools either ship 100+ hardcoded modules you can't customize (Starship) or interpret scripts on every render (adding latency). Promptorius compiles your prompt script to a native binary — zero interpreter overhead, full scripting power.
+Most prompt tools either ship 100+ hardcoded modules you can't customize enough (Starship) or interpret scripts on every render (adding latency). Promptorius compiles your prompt script to a native binary — zero interpreter overhead, full scripting power.
 
 - **Fast**: prompt renders in ~0.1ms (git adds ~3ms, runs in parallel)
 - **Simple**: one config file, two functions (`left_prompt`, `right_prompt`)
