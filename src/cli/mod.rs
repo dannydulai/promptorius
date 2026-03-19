@@ -116,14 +116,36 @@ fn run_explain(cmd_args: &[String], right: bool) -> Result<(), CliError> {
     append_stdlib_dir(&mut script_dirs);
     let stdlib = stdlib_scripts();
 
-    let start = std::time::Instant::now();
-    let output = pipeline::render(&cfg, &cmds, right, &script_dirs, &stdlib)?;
-    let elapsed = start.elapsed();
+    let (output, stats) =
+        pipeline::render_with_stats(&cfg, &cmds, right, &script_dirs, &stdlib)?;
 
     eprintln!("--- promptorius explain ---");
-    eprintln!("render time: {:.1}ms", elapsed.as_secs_f64() * 1000.0);
-    eprintln!("segments defined: {}", cfg.segments.len());
-    eprintln!("format: {}", if right { "right_format" } else { "format" });
+    eprintln!();
+
+    // Per-segment breakdown, sorted by duration descending
+    let mut segs = stats.segments.clone();
+    segs.sort_by(|a, b| b.duration_us.cmp(&a.duration_us));
+
+    for seg in &segs {
+        let ms = seg.duration_us as f64 / 1000.0;
+        let status = if let Some(err) = &seg.error {
+            format!("ERROR: {err}")
+        } else if seg.had_output {
+            format!("{} bytes", seg.output_len)
+        } else {
+            "hidden".to_string()
+        };
+        eprintln!("  {:>7.2}ms  {:<20} {}", ms, seg.name, status);
+    }
+
+    let seg_total_ms = segs.iter().map(|s| s.duration_us).sum::<u128>() as f64 / 1000.0;
+    let template_ms = stats.template_eval_us as f64 / 1000.0;
+    let total_ms = stats.total_us as f64 / 1000.0;
+
+    eprintln!();
+    eprintln!("  {:>7.2}ms  segments total", seg_total_ms);
+    eprintln!("  {:>7.2}ms  template eval", template_ms);
+    eprintln!("  {:>7.2}ms  total", total_ms);
     eprintln!("---");
     print!("{output}");
     Ok(())

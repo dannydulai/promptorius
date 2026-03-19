@@ -12,6 +12,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::time::Instant;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -23,6 +24,24 @@ pub enum PipelineError {
     Config(#[from] crate::config::ConfigError),
 }
 
+/// Timing info for a single segment execution.
+#[derive(Debug, Clone)]
+pub struct SegmentTiming {
+    pub name: String,
+    pub duration_us: u128,
+    pub output_len: usize,
+    pub had_output: bool,
+    pub error: Option<String>,
+}
+
+/// Stats collected during a render.
+#[derive(Debug, Clone)]
+pub struct RenderStats {
+    pub segments: Vec<SegmentTiming>,
+    pub template_eval_us: u128,
+    pub total_us: u128,
+}
+
 /// Render a prompt string from config, lazily executing segments as `s()` is called.
 pub fn render(
     config: &Config,
@@ -31,6 +50,20 @@ pub fn render(
     script_dirs: &[PathBuf],
     stdlib_scripts: &HashMap<String, &str>,
 ) -> Result<String, PipelineError> {
+    let (output, _) = render_with_stats(config, cmds, right, script_dirs, stdlib_scripts)?;
+    Ok(output)
+}
+
+/// Render a prompt and return timing stats for each segment.
+pub fn render_with_stats(
+    config: &Config,
+    cmds: &[host::CmdDef],
+    right: bool,
+    script_dirs: &[PathBuf],
+    stdlib_scripts: &HashMap<String, &str>,
+) -> Result<(String, RenderStats), PipelineError> {
+    let total_start = Instant::now();
+
     let format_str = if right {
         config.prompt.right_format.as_deref().unwrap_or("")
     } else {
@@ -38,7 +71,11 @@ pub fn render(
     };
 
     if format_str.is_empty() {
-        return Ok(String::new());
+        return Ok((String::new(), RenderStats {
+            segments: vec![],
+            template_eval_us: 0,
+            total_us: 0,
+        }));
     }
 
     // Set up the eval engine for the format template
@@ -49,10 +86,13 @@ pub fn render(
     let cache: Rc<RefCell<HashMap<String, String>>> =
         Rc::new(RefCell::new(HashMap::new()));
 
+    // Timing log
+    let timings: Rc<RefCell<Vec<SegmentTiming>>> =
+        Rc::new(RefCell::new(Vec::new()));
+
     // Clone what s() needs into its closure
     let segments = config.segments.clone();
     let colors = config.colors.clone();
-    let settings_timeout = config.settings.timeout;
     let cmds_owned: Vec<host::CmdDef> = cmds.to_vec();
     let dirs_owned: Vec<PathBuf> = script_dirs.to_vec();
     let stdlib_owned: HashMap<String, String> = stdlib_scripts
@@ -60,6 +100,7 @@ pub fn render(
         .map(|(k, v)| (k.clone(), v.to_string()))
         .collect();
     let cache_clone = cache.clone();
+    let timings_clone = timings.clone();
 
     eval_engine
         .engine_mut()
@@ -69,8 +110,10 @@ pub fn render(
                 return result.clone();
             }
 
+            let start = Instant::now();
+
             // Resolve and execute the segment
-            let result = execute_segment(
+            let (output, error) = execute_segment_timed(
                 name,
                 &segments,
                 &colors,
@@ -79,15 +122,27 @@ pub fn render(
                 &stdlib_owned,
             );
 
-            let output = result.unwrap_or_default();
+            let elapsed = start.elapsed().as_micros();
+            let result = output.unwrap_or_default();
+
+            timings_clone.borrow_mut().push(SegmentTiming {
+                name: name.to_string(),
+                duration_us: elapsed,
+                output_len: result.len(),
+                had_output: !result.is_empty(),
+                error,
+            });
+
             cache_clone
                 .borrow_mut()
-                .insert(name.to_string(), output.clone());
-            output
+                .insert(name.to_string(), result.clone());
+            result
         });
 
     // Parse and evaluate the format template
+    let template_start = Instant::now();
     let output = template::evaluate(format_str, &eval_engine)?;
+    let template_us = template_start.elapsed().as_micros();
 
     // Add newline prefix if configured
     let output = if !right && config.prompt.add_newline {
@@ -103,25 +158,40 @@ pub fn render(
         _ => output,
     };
 
-    Ok(output)
+    let total_us = total_start.elapsed().as_micros();
+
+    // Subtract segment times from template time to get pure template eval
+    let segment_total_us: u128 = timings.borrow().iter().map(|t| t.duration_us).sum();
+    let pure_template_us = template_us.saturating_sub(segment_total_us);
+
+    let stats = RenderStats {
+        segments: timings.borrow().clone(),
+        template_eval_us: pure_template_us,
+        total_us,
+    };
+
+    Ok((output, stats))
 }
 
-/// Execute a single segment script and return its output.
-fn execute_segment(
+/// Execute a single segment, returning output and optional error message.
+fn execute_segment_timed(
     name: &str,
     segments: &HashMap<String, crate::config::SegmentConfig>,
     colors: &HashMap<String, crate::config::ColorDef>,
     cmds: &[host::CmdDef],
     script_dirs: &[PathBuf],
     stdlib_scripts: &HashMap<String, String>,
-) -> Option<String> {
+) -> (Option<String>, Option<String>) {
     let seg_config = segments.get(name);
     let default_script = format!("{name}.rhai");
     let script_name = seg_config
         .and_then(|s| s.script.as_deref())
         .unwrap_or(&default_script);
 
-    let script_source = resolve_script(script_name, script_dirs, stdlib_scripts)?;
+    let script_source = match resolve_script(script_name, script_dirs, stdlib_scripts) {
+        Some(s) => s,
+        None => return (None, Some(format!("script not found: {script_name}"))),
+    };
 
     // Build a minimal config just for host registration
     let config_for_host = crate::config::Config {
@@ -146,21 +216,22 @@ fn execute_segment(
     let ast = match engine.compile_source(&script_source) {
         Ok(ast) => ast,
         Err(e) => {
-            eprintln!("promptorius: {script_name}: {e}");
-            return None;
+            let msg = format!("{script_name}: {e}");
+            eprintln!("promptorius: {msg}");
+            return (None, Some(msg));
         }
     };
     match engine.eval_ast_with_scope(&ast, &mut scope) {
-        Ok(result) => result,
+        Ok(result) => (result, None),
         Err(e) => {
-            eprintln!("promptorius: {script_name}: {e}");
-            None
+            let msg = format!("{script_name}: {e}");
+            eprintln!("promptorius: {msg}");
+            (None, Some(msg))
         }
     }
 }
 
 /// Wrap ANSI escape sequences for shell-specific prompt rendering.
-/// zsh needs `%{...%}`, bash needs `\[...\]` to mark zero-width characters.
 fn wrap_escapes_for_shell(s: &str, shell: &str) -> String {
     match shell {
         "zsh" => wrap_ansi_escapes(s, "%{", "%}"),
@@ -178,12 +249,10 @@ fn wrap_ansi_escapes(s: &str, prefix: &str, suffix: &str) -> String {
 
     while i < len {
         if bytes[i] == 0x1b && i + 1 < len && bytes[i + 1] == b'[' {
-            // Start of ANSI escape sequence
             result.push_str(prefix);
             result.push('\x1b');
             result.push('[');
             i += 2;
-            // Consume until 'm' (SGR terminator)
             while i < len {
                 result.push(bytes[i] as char);
                 if bytes[i] == b'm' {
@@ -194,7 +263,6 @@ fn wrap_ansi_escapes(s: &str, prefix: &str, suffix: &str) -> String {
             }
             result.push_str(suffix);
         } else {
-            // Regular byte — could be multi-byte UTF-8
             let c = s[i..].chars().next().unwrap();
             result.push(c);
             i += c.len_utf8();
@@ -210,7 +278,6 @@ fn resolve_script(
     search_dirs: &[PathBuf],
     stdlib_scripts: &HashMap<String, String>,
 ) -> Option<String> {
-    // Search user dirs first
     for dir in search_dirs {
         let path = dir.join(script_name);
         if path.exists() {
@@ -219,8 +286,6 @@ fn resolve_script(
             }
         }
     }
-
-    // Fall back to bundled stdlib
     stdlib_scripts.get(script_name).cloned()
 }
 
