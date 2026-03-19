@@ -354,7 +354,6 @@ fn parse_color_to_sgr_code(s: &str, is_fg: bool) -> String {
     };
     (if is_fg { base_fg } else { base_bg }).to_string()
 }
-}
 
 // ============================================================
 // Built-in functions
