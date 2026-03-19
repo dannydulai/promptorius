@@ -180,7 +180,7 @@ fn right_prompt() {
         if (status.ahead > 0)  { remote += `{C("git_ahead")} ↑{status.ahead}` }
         if (status.behind > 0) { remote += `{C("git_behind")} ↓{status.behind}` }
 
-        result += `{C("git-branch")} {branch}{C("")}{indicators}{remote}`
+        result += `{C("git-branch")} {branch}{C("")}{indicators}{remote}`
     }
 
     # Current time (uncomment to enable)
