@@ -282,6 +282,15 @@ fn right_prompt() {
 | `battery.state()` | string | `"charging"`, `"discharging"`, `"full"`, `"empty"`, `"none"` |
 | `battery.time()` | number | Seconds remaining, `-1` if unavailable |
 
+### Type coercion functions
+
+| Function | Description |
+|---|---|
+| `string(val)` | Force convert to string. `null` → `""`, numbers → decimal string, bool → `"true"`/`"false"` |
+| `number(val)` | Force convert to number. `null` → `0`, `""` → `0`, `"5.2"` → `5.2`, non-numeric strings → `0`, `true` → `1`, `false` → `0` |
+| `array(val)` | Force convert to array. `null` → `[]`, string → `[string]`, array → identity |
+| `dict(val)` | Force convert to dict. `null` → `{}`, array of `[key, value]` pairs → dict |
+
 ### String methods
 
 | Method | Description |
@@ -546,8 +555,3 @@ fn right_prompt() {
 - **No package manager.** Copy-paste functions between scripts.
 - **No Windows support for v1.** macOS and Linux only.
 
-## Open questions
-
-1. **WASM target?** Could compile to WASM for portability, but adds complexity.
-2. **LSP / editor support?** Syntax highlighting and error checking for config files.
-3. **Hot reload?** Watch mode that recompiles on script change.
