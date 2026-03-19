@@ -27,7 +27,6 @@ pub fn register_all(engine: &mut ScriptEngine, config: &Config, cmds: &[CmdDef])
     color::register(rhai, &config.colors);
     cache::register(rhai);
 
-    // Register --cmd defined functions
     for cmd in cmds {
         register_cmd(rhai, cmd);
     }
