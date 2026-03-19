@@ -6,7 +6,7 @@ promptorius_precmd() {
         duration_ms=$(( ${elapsed%.*} * 1000 + 10#${${elapsed#*.}:0:3} ))
     fi
     _promptorius_cmd_args="--cmd :int:exit_code:${exit_code} --cmd :int:duration:${duration_ms}"
-    _promptorius_keymap="${KEYMAP:-main}"
+    _promptorius_keymap="${KEYMAP:-}"
     promptorius_render
 }
 
@@ -22,7 +22,7 @@ promptorius_preexec() {
 }
 
 promptorius_zle_keymap_select() {
-    _promptorius_keymap="${KEYMAP:-main}"
+    _promptorius_keymap="${KEYMAP:-}"
     promptorius_render
 }
 
