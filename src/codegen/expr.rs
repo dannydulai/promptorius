@@ -248,6 +248,12 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
                 }
                 return format!("builtin_regex({})", ref_args.join(", "));
             }
+            "time" => {
+                let fmt = arg_exprs.first().map(|a| a.clone()).unwrap_or_else(|| "Value::Str(\"%H:%M\".to_string())".to_string());
+                return format!(
+                    "Value::Str({{ let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(); let tm = time_to_parts(now); format_time(&tm, &({fmt}).to_str()) }})"
+                );
+            }
             "floor" => return format!("Value::Number(({}).to_num().floor())", arg_exprs.first().unwrap_or(&"Value::Null".to_string())),
             "ceil" => return format!("Value::Number(({}).to_num().ceil())", arg_exprs.first().unwrap_or(&"Value::Null".to_string())),
             "round" => return format!("Value::Number(({}).to_num().round())", arg_exprs.first().unwrap_or(&"Value::Null".to_string())),

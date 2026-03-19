@@ -349,6 +349,14 @@ Named colors use standard ANSI codes (30-37, 90-97) so they respect your termina
 | `battery.state()` | string | `"charging"`, `"discharging"`, `"full"`, `"empty"`, `"none"` |
 | `battery.time()` | number | Seconds remaining, `-1` if unavailable |
 
+### Time
+
+| Function | Returns | Description |
+|---|---|---|
+| `time(fmt)` | string | Current local time formatted with the given format string. Default `"%H:%M"`. |
+
+Format specifiers: `%Y` (4-digit year), `%m` (month 01-12), `%d` (day 01-31), `%H` (hour 00-23), `%M` (minute 00-59), `%S` (second 00-59), `%I` (hour 01-12), `%p` (AM/PM).
+
 ### Math functions
 
 | Function | Description |

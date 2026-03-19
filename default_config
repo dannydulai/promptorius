@@ -183,6 +183,9 @@ fn right_prompt() {
         result += `{C("git-branch")} {branch}{C("")}{indicators}{remote}`
     }
 
+    # Current time (uncomment to enable)
+    # result += ` {time("%H:%M")}`
+
     # Battery (uncomment to enable — uses nerd font icons)
     # pct = battery.pct()
     # if (pct >= 0) {

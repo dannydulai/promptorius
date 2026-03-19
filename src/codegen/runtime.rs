@@ -847,6 +847,40 @@ fn value_index(obj: &Value, idx: &Value) -> Value {
     }
 }
 
+// --- Time formatting ---
+struct TimeParts { year: u64, mon: u64, day: u64, hour: u64, min: u64, sec: u64 }
+
+fn time_to_parts(epoch: u64) -> TimeParts {
+    // Simple UTC time calculation (no TZ support — use libc for local time)
+    let secs = epoch as i64;
+    unsafe {
+        let t = libc::time(std::ptr::null_mut());
+        let tm = libc::localtime(&secs as *const i64 as *const libc::time_t);
+        if tm.is_null() {
+            return TimeParts { year: 1970, mon: 1, day: 1, hour: 0, min: 0, sec: 0 };
+        }
+        TimeParts {
+            year: ((*tm).tm_year + 1900) as u64,
+            mon: ((*tm).tm_mon + 1) as u64,
+            day: (*tm).tm_mday as u64,
+            hour: (*tm).tm_hour as u64,
+            min: (*tm).tm_min as u64,
+            sec: (*tm).tm_sec as u64,
+        }
+    }
+}
+
+fn format_time(tm: &TimeParts, fmt: &str) -> String {
+    fmt.replace("%Y", &format!("{:04}", tm.year))
+       .replace("%m", &format!("{:02}", tm.mon))
+       .replace("%d", &format!("{:02}", tm.day))
+       .replace("%H", &format!("{:02}", tm.hour))
+       .replace("%M", &format!("{:02}", tm.min))
+       .replace("%S", &format!("{:02}", tm.sec))
+       .replace("%I", &format!("{:02}", if tm.hour % 12 == 0 { 12 } else { tm.hour % 12 }))
+       .replace("%p", if tm.hour < 12 { "AM" } else { "PM" })
+}
+
 // --- Shell escape wrapping ---
 fn wrap_escapes_for_shell(s: &str, shell: &str) -> String {
     match shell {

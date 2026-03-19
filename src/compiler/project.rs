@@ -13,6 +13,7 @@ edition = "2021"
 git2 = "0.19"
 starship-battery = "0.10"
 glob = "0.3"
+libc = "0.2"
 regex = "1"
 
 [profile.release]
