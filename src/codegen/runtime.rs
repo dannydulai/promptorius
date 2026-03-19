@@ -596,6 +596,17 @@ fn value_method_call(obj: &Value, method: &str, args: Vec<Value>) -> Value {
                 let n = args.first().map(|a| a.to_num() as usize).unwrap_or(1);
                 Value::Str(s.repeat(n))
             }
+            "pad_start" => {
+                let width = args.first().map(|a| a.to_num() as usize).unwrap_or(0);
+                let fill = args.get(1).map(|a| a.to_str()).unwrap_or_else(|| " ".to_string());
+                let fill_char = fill.chars().next().unwrap_or(' ');
+                if s.len() >= width {
+                    Value::Str(s.clone())
+                } else {
+                    let padding: String = std::iter::repeat(fill_char).take(width - s.len()).collect();
+                    Value::Str(format!("{padding}{s}"))
+                }
+            }
             "replace" => {
                 let from = args.first().cloned().unwrap_or(Value::Null);
                 let to = args.get(1).map(|a| a.to_str()).unwrap_or_default();
