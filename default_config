@@ -1,77 +1,218 @@
-# Promptorius prompt script
-# https://github.com/user/promptorius
+# ============================================================
+# Promptorius config
+# ============================================================
 
-# --- Colors ---
+# --- Settings ---
+
+DURATION_THRESHOLD_MS = 2000   # show command duration if it exceeds this (ms)
+MAX_BRANCH_LEN = 20            # truncate git branch names longer than this
+
+# --- Color palette ---
+# Simple string = foreground only. Dict = { fg, bg, bold, italic, dim, etc. }
+# Named colors use terminal theme. Hex (#rgb or #rrggbb) uses truecolor.
+
 colors({
-    directory: "#6ec2e8",
-    error: { fg: "red", bold: true },
-    char_normal: "#666",
-    char_vicmd: "#ff40c0",
-    git_branch: "#e89050",
-    # git_staged: "green",
-    # git_modified: "yellow",
-    # git_untracked: "red",
-    # battery_normal: "green",
-    # battery_low: "#ff8800",
-    # battery_critical: { fg: "red", bold: true },
+    "directory":       "#50b4ff",
+    "git-origin":      "#6060a0",
+    "git-branch":      "#ddd",
+    "git-staged":      "bright green",
+    "git-modified":    "#ff8080",
+    "git-untracked":   "bright purple",
+    "git-conflics":    "bright red",
+    "git-ahead":       "bright yellow",
+    "git-behind":      "yellow",
+    "jobs":            "#ff8080",
+    "keymap_vicmd":    "#ff40c0",
+    "keymap_normal":   "#666666",
+    "duration":        "bright yellow",
+    "exitcode":        { bg: "bright red", fg: "bright white" },
+    "battery-empty":   "#f00",
+    "battery-low":     "#f88",
+    "battery-normal":  "#fff",
+    "battery-full":    "#0f0",
+    "battery-charging": "#ff0",
 })
 
-# --- Left prompt ---
+# ============================================================
+# Left prompt
+# ============================================================
+#
+# Layout (in a git repo):
+#   ~/path/to/repo
+#   user/repo/subdir │
+#
+# Layout (outside a git repo):
+#   ~/path/to/dir │
+#
+# The first line shows the repo root (with ~ for $HOME).
+# The second line shows the origin name + path within the repo.
+# ҂ appears before the prompt char if there are background jobs.
+# │ is repeated $SHLVL times (# if root).
+# Non-zero exit codes show "Exited w/ <code>" above everything.
+
 fn left_prompt() {
     result = ""
 
-    # Show non-zero exit code
-    if (exit_code != 0) {
-        result += `{C("error")}Exited w/ {exit_code}{C("")}\n`
+    # Kick off git lookups in parallel early
+    o = wait({
+        is_git: spawn(fn() { return git.is_repo() }),
+        root: spawn(fn() { return git.root() }),
+        origin: spawn(fn() { return git.origin().replace(regex(".*github.com:?", "")).replace(regex(".git$"), "") }),
+    });
+
+    # Non-zero exit code on its own line
+    code = exit_code
+    if (code != 0) {
+        result += `{C("exitcode")} Exited w/ {code} {C("")}\n`
     }
 
-    # Directory
     dir = cwd()
     home = env("HOME")
-    display = dir.starts_with(home) ? `~{dir.slice(home.len(), null)}` : dir
-    result += `{C("directory")}{display}{C("")}`
 
-    # Prompt character
-    char = env("USER") == "root" ? "#" : "│"
-    col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
-    lvl = number(shlvl)
-    if (lvl < 1) { lvl = 1 }
-    result += ` {C(col)}{char.repeat(lvl)}{C("")} `
+    if (o.is_git) {
+        # In a git repo: two-line directory display
+        # Line 1: repo root path
+        if (o.root.starts_with(home)) {
+            trunc_dir = `~{o.root.slice(home.len(), null)}`
+        } else {
+            trunc_dir = o.root
+        }
+        result += `{C("directory")}{trunc_dir}{C("")}\n`
 
+        # Line 2: origin/path-within-repo
+        if (o.origin == "") { o.origin = "local"; }
+
+        if (dir == o.root) {
+            result += `{C("git-origin")}{o.origin}{C("directory")}/{C("")} `
+        } else {
+            result += `{C("git-origin")}{o.origin}{C("directory")}{dir.slice(o.root.len(), null)}{C("")} `
+        }
+    } else {
+        # Not in a git repo: single-line directory
+        if (dir.starts_with(home)) {
+            trunc_dir = `~{dir.slice(home.len(), null)}`
+        } else {
+            trunc_dir = dir
+        }
+        result += `{C("directory")}{trunc_dir}{C("")} `
+    }
+
+    # Background jobs indicator
+    if (jobs > 0) {
+        result += `{C("jobs")}҂`
+    }
+
+    # Vi mode color
+    if (keymap == "vicmd") {
+        result += C("keymap_vicmd")
+    } else {
+        result += C("keymap_normal")
+    }
+
+    # Prompt character: │ for user, # for root, repeated SHLVL times
+    if (env("USER") == "root") {
+        char = "#"
+    } else {
+        char = "│"
+    }
+    result += char.repeat((shlvl > 1 ? shlvl : 1))
+
+    result += `{C("")} `
     return result
 }
 
-# --- Right prompt ---
+# ============================================================
+# Right prompt
+# ============================================================
+#
+# Shows (right to left):
+#   - Command duration (if above threshold)
+#   - Git branch + status indicators
+#
+# Git indicators:
+#   + staged    ✎ modified    ? untracked    ✘ conflicts
+#   ↑ ahead     ↓ behind
+
 fn right_prompt() {
-    if (!git.is_repo()) { return "" }
-    return `{C("git_branch")} {git.branch()}{C("")}`
+    result = ""
+
+    # Command duration (only if above threshold)
+    threshold = DURATION_THRESHOLD_MS ?? 2000
+    if (duration >= threshold) {
+        if (duration >= 60000) {
+            mins = floor(duration / 60000)
+            secs = floor((duration % 60000) / 1000)
+            result += `{C("duration")}{mins}m{secs}s{C("")} `
+        } else if (duration >= 1000) {
+            secs = floor(duration / 1000)
+            ms = string(duration % 1000).pad_start(3, "0")
+            result += `{C("duration")}{secs}.{ms}s{C("")} `
+        } else {
+            result += `{C("duration")}{duration}ms{C("")} `
+        }
+    }
+
+    # Git branch and status
+    if (git.is_repo()) {
+        w = wait([
+            spawn(fn() { return git.branch() }),
+            spawn(fn() { return git.status() }),
+        ])
+        branch = w[0]
+        status = w[1]
+
+        # Truncate long branch names
+        max_len = MAX_BRANCH_LEN ?? 40
+        if (branch.len() > max_len) {
+            branch = `{branch.slice(0, max_len-1)}…`
+        }
+
+        # Status indicators
+        indicators = ""
+        if (status.staged > 0)    { indicators += `{C("git-staged")} +` }
+        if (status.modified > 0)  { indicators += `{C("git-modified")} ✎` }
+        if (status.untracked > 0) { indicators += `{C("git-untracked")} ?` }
+        if (status.conflicts > 0) { indicators += `{C("git-conflicts")} ✘` }
+        if (indicators != "") { indicators += C("") }
+
+        # Ahead/behind remote
+        remote = ""
+        if (status.ahead > 0)  { remote += `{C("git_ahead")} ↑{status.ahead}` }
+        if (status.behind > 0) { remote += `{C("git_behind")} ↓{status.behind}` }
+
+        result += `{C("git-branch")} {branch}{C("")}{indicators}{remote}`
+    }
+
+    # Battery (uncomment to enable — uses nerd font icons)
+    # pct = battery.pct()
+    # if (pct >= 0) {
+    #     state = battery.state()
+    #     if (state == "full") {
+    #         icon = '󰁹'
+    #         state = ""
+    #         col = "battery-full";
+    #     } else {
+    #         col = pct <= 10 ? "battery-empty" : pct <= 25 ? "battery-low" : "battery-normal"
+    #         if (pct > 90) { icon = '󰂂' }
+    #         else if (pct > 80) { icon = '󰂁' }
+    #         else if (pct > 70) { icon = '󰂀' }
+    #         else if (pct > 60) { icon = '󰁿' }
+    #         else if (pct > 50) { icon = '󰁾' }
+    #         else if (pct > 40) { icon = '󰁽' }
+    #         else if (pct > 30) { icon = '󰁼' }
+    #         else if (pct > 20) { icon = '󰁻' }
+    #         else if (pct > 10) { icon = '󰁺' }
+    #         else { icon = '󰂎' }
+    #         if (state == "charging") {
+    #             state = ` {C("battery-charging")}󱐋`
+    #         } else if (state == "discharging") {
+    #             state = "";
+    #         } else {
+    #             state = " " + state;
+    #         }
+    #     }
+    #     result += ` {C(col)}{icon} {pct}%{state}{C("")}`
+    # }
+
+    return result
 }
-
-# --- Uncomment below for more features ---
-
-# fn git_prompt() {
-#     if (!git.is_repo()) { return "" }
-#     branch = git.branch()
-#     s = git.status()
-#     indicators = ""
-#     if (s.staged > 0)    { indicators += `{C("git_staged")} +` }
-#     if (s.modified > 0)  { indicators += `{C("git_modified")} ✎` }
-#     if (s.untracked > 0) { indicators += `{C("git_untracked")} ?` }
-#     if (s.conflicts > 0) { indicators += `{C("error")} ✘` }
-#     if (indicators != "") { indicators += C("") }
-#     remote = ""
-#     if (s.ahead > 0)  { remote += ` ↑{s.ahead}` }
-#     if (s.behind > 0) { remote += ` ↓{s.behind}` }
-#     return `{C("git_branch")} {branch}{C("")}{indicators}{remote}`
-# }
-
-# fn battery_prompt() {
-#     pct = battery.pct()
-#     if (pct < 0) { return "" }
-#     state = battery.state()
-#     if (state == "full") { return "" }
-#     col = pct <= 10 ? "battery_critical" : pct <= 25 ? "battery_low" : "battery_normal"
-#     icon = pct > 75 ? "█" : pct > 50 ? "▆" : pct > 25 ? "▄" : pct > 10 ? "▂" : "▁"
-#     suffix = state == "charging" ? "⚡" : ""
-#     return `{C(col)}{icon} {pct}%{suffix}{C("")}`
-# }
