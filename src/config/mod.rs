@@ -20,7 +20,7 @@ pub enum ConfigError {
     Parse(#[from] toml::de::Error),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub prompt: PromptConfig,
     #[serde(default)]
@@ -31,7 +31,7 @@ pub struct Config {
     pub settings: Settings,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct PromptConfig {
     pub format: String,
     #[serde(default)]
@@ -76,7 +76,7 @@ pub enum UnderlineStyle {
     Dashed,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct SegmentConfig {
     pub script: Option<String>,
     /// All other key-value pairs are passed to the script as the `config` map.
@@ -84,7 +84,7 @@ pub struct SegmentConfig {
     pub extra: HashMap<String, toml::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Settings {
     #[serde(default)]
     pub script_path: Vec<String>,

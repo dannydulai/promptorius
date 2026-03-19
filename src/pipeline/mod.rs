@@ -1,17 +1,17 @@
-//! Segment pipeline: resolution, concurrent execution, format template evaluation.
+//! Segment pipeline: lazy segment execution and format template evaluation.
 //!
-//! Resolves which segments to run from config, executes them concurrently,
-//! and evaluates the format template to produce the final prompt string.
+//! Segments are only executed when `s("name")` is called from the format template.
+//! Results are cached so repeated `s()` calls for the same segment are free.
 
 mod template;
 
-use crate::config::{Config, SegmentConfig};
+use crate::config::Config;
 use crate::host;
 use crate::script::ScriptEngine;
-use rayon::prelude::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::rc::Rc;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -21,12 +21,9 @@ pub enum PipelineError {
 
     #[error("config error: {0}")]
     Config(#[from] crate::config::ConfigError),
-
-    #[error("timeout: prompt render exceeded {0}ms")]
-    Timeout(u64),
 }
 
-/// Render a prompt string from config, executing all segments and evaluating the format template.
+/// Render a prompt string from config, lazily executing segments as `s()` is called.
 pub fn render(
     config: &Config,
     cmds: &[host::CmdDef],
@@ -44,54 +41,49 @@ pub fn render(
         return Ok(String::new());
     }
 
-    // Collect all segment names referenced in the format template
-    let segment_names = collect_segment_names(format_str, &config.segments);
-
-    // Execute all segments concurrently
-    let timeout = Duration::from_millis(config.settings.timeout);
-    let start = Instant::now();
-
-    let results: HashMap<String, String> = segment_names
-        .par_iter()
-        .filter_map(|name| {
-            if start.elapsed() >= timeout {
-                return None;
-            }
-
-            let seg_config = config.segments.get(name.as_str());
-            let default_script = format!("{name}.rhai");
-            let script_name = seg_config
-                .and_then(|s| s.script.as_deref())
-                .unwrap_or(&default_script);
-
-            let script_source = resolve_script(script_name, script_dirs, stdlib_scripts)?;
-
-            // Each segment gets its own engine instance with host API
-            let mut engine = ScriptEngine::new();
-            host::register_all(&mut engine, config, cmds);
-
-            // Build scope with segment-specific config map
-            let empty = HashMap::new();
-            let extra = seg_config.map(|s| &s.extra).unwrap_or(&empty);
-            let mut scope = host::segment_scope(extra);
-
-            let ast = engine.compile_source(&script_source).ok()?;
-            let output = engine.eval_ast_with_scope(&ast, &mut scope).ok()?;
-
-            output.map(|s| (name.clone(), s))
-        })
-        .collect();
-
-    // Now evaluate the format template with segment results available
+    // Set up the eval engine for the format template
     let mut eval_engine = ScriptEngine::new();
     host::register_all(&mut eval_engine, config, cmds);
 
-    // Register s() function that looks up segment results
-    let results_clone = results.clone();
+    // Cache for lazily-evaluated segment results
+    let cache: Rc<RefCell<HashMap<String, String>>> =
+        Rc::new(RefCell::new(HashMap::new()));
+
+    // Clone what s() needs into its closure
+    let segments = config.segments.clone();
+    let colors = config.colors.clone();
+    let settings_timeout = config.settings.timeout;
+    let cmds_owned: Vec<host::CmdDef> = cmds.to_vec();
+    let dirs_owned: Vec<PathBuf> = script_dirs.to_vec();
+    let stdlib_owned: HashMap<String, String> = stdlib_scripts
+        .iter()
+        .map(|(k, v)| (k.clone(), v.to_string()))
+        .collect();
+    let cache_clone = cache.clone();
+
     eval_engine
         .engine_mut()
         .register_fn("s", move |name: &str| -> String {
-            results_clone.get(name).cloned().unwrap_or_default()
+            // Return cached result if already executed
+            if let Some(result) = cache_clone.borrow().get(name) {
+                return result.clone();
+            }
+
+            // Resolve and execute the segment
+            let result = execute_segment(
+                name,
+                &segments,
+                &colors,
+                &cmds_owned,
+                &dirs_owned,
+                &stdlib_owned,
+            );
+
+            let output = result.unwrap_or_default();
+            cache_clone
+                .borrow_mut()
+                .insert(name.to_string(), output.clone());
+            output
         });
 
     // Parse and evaluate the format template
@@ -107,20 +99,52 @@ pub fn render(
     Ok(output)
 }
 
-/// Collect segment names that are referenced in config (we run all defined segments
-/// since the format template uses s("name") calls which are opaque to static analysis).
-fn collect_segment_names(
-    _format_str: &str,
-    segments: &HashMap<String, SegmentConfig>,
-) -> Vec<String> {
-    segments.keys().cloned().collect()
+/// Execute a single segment script and return its output.
+fn execute_segment(
+    name: &str,
+    segments: &HashMap<String, crate::config::SegmentConfig>,
+    colors: &HashMap<String, crate::config::ColorDef>,
+    cmds: &[host::CmdDef],
+    script_dirs: &[PathBuf],
+    stdlib_scripts: &HashMap<String, String>,
+) -> Option<String> {
+    let seg_config = segments.get(name);
+    let default_script = format!("{name}.rhai");
+    let script_name = seg_config
+        .and_then(|s| s.script.as_deref())
+        .unwrap_or(&default_script);
+
+    let script_source = resolve_script(script_name, script_dirs, stdlib_scripts)?;
+
+    // Build a minimal config just for host registration
+    let config_for_host = crate::config::Config {
+        prompt: crate::config::PromptConfig {
+            format: String::new(),
+            right_format: None,
+            add_newline: false,
+        },
+        colors: colors.clone(),
+        segments: HashMap::new(),
+        settings: crate::config::Settings::default(),
+    };
+
+    let mut engine = ScriptEngine::new();
+    host::register_all(&mut engine, &config_for_host, cmds);
+
+    // Build scope with segment-specific config map
+    let empty = HashMap::new();
+    let extra = seg_config.map(|s| &s.extra).unwrap_or(&empty);
+    let mut scope = host::segment_scope(extra);
+
+    let ast = engine.compile_source(&script_source).ok()?;
+    engine.eval_ast_with_scope(&ast, &mut scope).ok()?
 }
 
 /// Resolve a script filename to its source code by searching directories, then stdlib.
 fn resolve_script(
     script_name: &str,
     search_dirs: &[PathBuf],
-    stdlib_scripts: &HashMap<String, &str>,
+    stdlib_scripts: &HashMap<String, String>,
 ) -> Option<String> {
     // Search user dirs first
     for dir in search_dirs {
@@ -133,32 +157,26 @@ fn resolve_script(
     }
 
     // Fall back to bundled stdlib
-    stdlib_scripts.get(script_name).map(|s| s.to_string())
+    stdlib_scripts.get(script_name).cloned()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SegmentConfig;
 
     #[test]
-    fn collect_all_segment_names() {
-        let mut segments = HashMap::new();
-        segments.insert(
-            "directory".to_string(),
-            SegmentConfig {
-                script: Some("directory.rhai".to_string()),
-                extra: HashMap::new(),
-            },
-        );
-        segments.insert(
-            "git".to_string(),
-            SegmentConfig {
-                script: Some("git.rhai".to_string()),
-                extra: HashMap::new(),
-            },
-        );
-        let names = collect_segment_names("", &segments);
-        assert_eq!(names.len(), 2);
+    fn resolve_stdlib_fallback() {
+        let mut stdlib = HashMap::new();
+        stdlib.insert("test.rhai".to_string(), "42".to_string());
+
+        let result = resolve_script("test.rhai", &[], &stdlib);
+        assert_eq!(result, Some("42".to_string()));
+    }
+
+    #[test]
+    fn resolve_missing_script() {
+        let stdlib = HashMap::new();
+        let result = resolve_script("nonexistent.rhai", &[], &stdlib);
+        assert!(result.is_none());
     }
 }
