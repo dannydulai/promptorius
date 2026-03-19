@@ -319,7 +319,25 @@ pct = results[1]
 | Function | Returns | Description |
 |---|---|---|
 | `setcolors(dict)` | null | Set the color palette |
-| `color(name)` | string | Emit ANSI escape for named color, `""` to reset |
+| `color(name)` | string | Emit ANSI escape for named color. `color("")` resets all formatting. |
+
+Each entry in the `setcolors` dict is either a simple string (foreground only) or a dict:
+
+| Key | Type | Description |
+|---|---|---|
+| `fg` | string | Foreground color |
+| `bg` | string | Background color |
+| `bold` | bool | Bold |
+| `italic` | bool | Italic |
+| `dim` | bool | Dim |
+| `strikethrough` | bool | Strikethrough |
+| `underline` | string | `"single"`, `"double"`, `"curly"`, `"dotted"`, `"dashed"` (kitty protocol) |
+| `underline_color` | string | Underline color (independent of fg, kitty protocol) |
+
+Color values: hex `"#ff5f00"`, short hex `"#f50"`, or named:
+`black`, `red`, `green`, `yellow`, `blue`, `magenta`/`purple`, `cyan`, `white`,
+`bright black`, `bright red`, `bright green`, `bright yellow`, `bright blue`,
+`bright magenta`/`bright purple`, `bright cyan`, `bright white`.
 
 ### Battery
 
