@@ -264,7 +264,6 @@ fn right_prompt() {
 | `cwd()` | string | Current working directory |
 | `os()` | string | `"macos"`, `"linux"`, `"windows"` |
 | `eprint(msg)` | null | Print to stderr (debug) |
-| `set_config(name, val)` | null | Set a config value (e.g. `"timeout"`, `"concurrency"`) |
 
 ### File operations
 

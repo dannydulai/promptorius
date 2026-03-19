@@ -380,11 +380,6 @@ fn builtin_eprint(msg: &Value) {
     eprintln!("{}", msg.to_str());
 }
 
-fn builtin_set_config(name: &Value, val: &Value) {
-    // Currently a no-op placeholder for future config settings
-    let _ = (name, val);
-}
-
 fn builtin_exec(cmd: &Value, args: &Value) -> Value {
     let cmd_str = cmd.to_str();
     let arg_vec: Vec<String> = args.to_array().iter().map(|a| a.to_str()).collect();

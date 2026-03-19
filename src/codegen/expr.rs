@@ -239,7 +239,6 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
             "eprint" => return format!("{{ builtin_eprint({}); Value::Null }}", ref_args.join(", ")),
             "setcolors" => return format!("{{ builtin_setcolors({}); Value::Null }}", ref_args.join(", ")),
             "color" => return format!("builtin_color({})", ref_args.join(", ")),
-            "set_config" => return format!("{{ builtin_set_config({}); Value::Null }}", ref_args.join(", ")),
             "exec" => return format!("builtin_exec({})", ref_args.join(", ")),
             "exec_ok" => return format!("builtin_exec_ok({})", ref_args.join(", ")),
             "regex" => {
