@@ -329,6 +329,14 @@ pct = results[1]
 | `battery.state()` | string | `"charging"`, `"discharging"`, `"full"`, `"empty"`, `"none"` |
 | `battery.time()` | number | Seconds remaining, `-1` if unavailable |
 
+### Math functions
+
+| Function | Description |
+|---|---|
+| `floor(n)` | Round down to nearest integer |
+| `ceil(n)` | Round up to nearest integer |
+| `round(n)` | Round to nearest integer |
+
 ### Type coercion functions
 
 | Function | Description |
@@ -354,6 +362,7 @@ pct = results[1]
 | `s.to_lower()` | Lowercase |
 | `s.to_number()` | Parse as number |
 | `s.repeat(n)` | Repeat n times |
+| `s.pad_start(width, char)` | Left-pad with char (default space) to at least width |
 
 ## --var arguments
 
