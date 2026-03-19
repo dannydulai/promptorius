@@ -2,6 +2,9 @@
 let threshold = config.get("threshold_ms") ?? 2000;
 let dur = duration();
 
+eprint(threshold.to_string() + "ms");
+eprint(dur.to_string() + "ms");
+
 if dur < threshold {
     return ();
 }

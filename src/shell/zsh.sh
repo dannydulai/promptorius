@@ -5,8 +5,8 @@ promptorius_precmd() {
     if [[ -n "$_promptorius_cmd_ran" ]]; then
         # A command was executed — show its exit code and duration
         if [[ -n "$_promptorius_start" ]]; then
-            local elapsed=$(( EPOCHREALTIME - _promptorius_start ))
-            duration_ms=$(( ${elapsed%.*} * 1000 + 10#${${elapsed#*.}:0:3} ))
+            local now=$EPOCHREALTIME
+            duration_ms=$(( (${now//.} - ${_promptorius_start//.}) / 1000 ))
         fi
         unset _promptorius_cmd_ran
     else
