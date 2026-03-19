@@ -39,6 +39,7 @@ promptorius_zle_keymap_select() {
     promptorius_render
 }
 
+zmodload zsh/parameter
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd promptorius_precmd
 add-zsh-hook preexec promptorius_preexec

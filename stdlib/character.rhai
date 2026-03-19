@@ -16,8 +16,6 @@ if count > 0 {
     result += color("jobs") + "҂ ";
 }
 
-
-
 if keymap() == "vicmd" {
     result += color("keymap_vicmd")
 } else {
