@@ -1,16 +1,19 @@
 //! Segment pipeline: two-pass execution and format template evaluation.
 //!
-//! Pass 1: Parse the format template to find s("name") calls, then execute
-//!         those segments using a shared engine (one engine setup for all segments).
-//! Pass 2: Evaluate the format template with segment results available via s().
+//! Pass 1: Evaluate the format template with a collector s() that records
+//!         which segments are needed (returns empty string).
+//! Pass 2: Execute those segments, then re-evaluate the template with
+//!         real s() results.
 
 mod template;
 
 use crate::config::Config;
 use crate::host;
 use crate::script::ScriptEngine;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::time::Instant;
 use thiserror::Error;
 
@@ -81,14 +84,10 @@ pub fn render_with_stats(
         }));
     }
 
-    // Pre-resolve stdlib into owned strings
     let stdlib_owned: HashMap<String, String> = stdlib_scripts
         .iter()
         .map(|(k, v)| (k.clone(), v.to_string()))
         .collect();
-
-    // Pass 1: Extract segment names from the format template
-    let segment_names = template::extract_segment_names(format_str);
 
     // Set up one shared engine with all host functions
     let engine_start = Instant::now();
@@ -96,7 +95,31 @@ pub fn render_with_stats(
     host::register_all(&mut engine, config, cmds);
     let engine_setup_us = engine_start.elapsed().as_micros();
 
-    // Execute each segment with the shared engine
+    // Pass 1: Run the template with a collector s() that just records names
+    let requested: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
+    let requested_clone = requested.clone();
+
+    engine
+        .engine_mut()
+        .register_fn("s", move |name: &str| -> String {
+            requested_clone.borrow_mut().push(name.to_string());
+            String::new()
+        });
+
+    // Evaluate template — we don't care about the output, just the s() calls
+    let _ = template::evaluate(format_str, &engine);
+
+    // Deduplicate while preserving order
+    let segment_names: Vec<String> = {
+        let req = requested.borrow();
+        let mut seen = std::collections::HashSet::new();
+        req.iter()
+            .filter(|n| seen.insert((*n).clone()))
+            .cloned()
+            .collect()
+    };
+
+    // Pass 2: Execute each segment with the shared engine
     let mut results: HashMap<String, String> = HashMap::new();
     let mut timings: Vec<SegmentTiming> = Vec::new();
 
@@ -114,31 +137,25 @@ pub fn render_with_stats(
                 eprintln!("promptorius: {msg}");
                 timings.push(SegmentTiming {
                     name: name.clone(),
-                    compile_us: 0,
-                    exec_us: 0,
-                    total_us: 0,
-                    output_len: 0,
-                    had_output: false,
+                    compile_us: 0, exec_us: 0, total_us: 0,
+                    output_len: 0, had_output: false,
                     error: Some(msg),
                 });
                 continue;
             }
         };
 
-        // Compile
         let compile_start = Instant::now();
         let ast = match engine.compile_source(&source) {
             Ok(ast) => ast,
             Err(e) => {
+                let compile_us = compile_start.elapsed().as_micros();
                 let msg = format!("{script_name}: {e}");
                 eprintln!("promptorius: {msg}");
                 timings.push(SegmentTiming {
                     name: name.clone(),
-                    compile_us: compile_start.elapsed().as_micros(),
-                    exec_us: 0,
-                    total_us: compile_start.elapsed().as_micros(),
-                    output_len: 0,
-                    had_output: false,
+                    compile_us, exec_us: 0, total_us: compile_us,
+                    output_len: 0, had_output: false,
                     error: Some(msg),
                 });
                 continue;
@@ -146,7 +163,6 @@ pub fn render_with_stats(
         };
         let compile_us = compile_start.elapsed().as_micros();
 
-        // Execute with per-segment scope
         let empty = HashMap::new();
         let extra = seg_config.map(|s| &s.extra).unwrap_or(&empty);
         let mut scope = host::segment_scope(extra);
@@ -169,19 +185,15 @@ pub fn render_with_stats(
 
         timings.push(SegmentTiming {
             name: name.clone(),
-            compile_us,
-            exec_us,
+            compile_us, exec_us,
             total_us: compile_us + exec_us,
-            output_len,
-            had_output,
-            error,
+            output_len, had_output, error,
         });
     }
 
-    // Pass 2: Evaluate the format template with s() returning cached results
+    // Pass 3: Re-evaluate the template with real s() results
     let template_start = Instant::now();
 
-    // Register s() that just does a lookup
     let results_clone = results.clone();
     engine
         .engine_mut()

@@ -93,62 +93,6 @@ fn parse(template: &str) -> Vec<TemplatePart> {
     parts
 }
 
-/// Extract segment names from s("name") calls in the format template.
-/// Uses simple string matching — finds all `s("...")` and `s('...')` patterns.
-pub fn extract_segment_names(template: &str) -> Vec<String> {
-    let mut names = Vec::new();
-    let parts = parse(template);
-
-    for part in parts {
-        if let TemplatePart::Expression(expr) = part {
-            extract_s_calls(&expr, &mut names);
-        }
-    }
-
-    // Deduplicate while preserving order
-    let mut seen = std::collections::HashSet::new();
-    names.retain(|n| seen.insert(n.clone()));
-    names
-}
-
-/// Find all s("name") or s('name') calls in a Rhai expression string.
-fn extract_s_calls(expr: &str, names: &mut Vec<String>) {
-    let bytes = expr.as_bytes();
-    let len = bytes.len();
-    let mut i = 0;
-
-    while i < len {
-        // Look for s( preceded by start or non-alphanumeric
-        if bytes[i] == b's'
-            && i + 1 < len
-            && bytes[i + 1] == b'('
-            && (i == 0 || !bytes[i - 1].is_ascii_alphanumeric() && bytes[i - 1] != b'_')
-        {
-            i += 2; // skip s(
-            // Skip whitespace
-            while i < len && bytes[i].is_ascii_whitespace() {
-                i += 1;
-            }
-            // Expect a quote
-            if i < len && (bytes[i] == b'"' || bytes[i] == b'\'') {
-                let quote = bytes[i];
-                i += 1;
-                let start = i;
-                while i < len && bytes[i] != quote {
-                    i += 1;
-                }
-                if i < len {
-                    let name = String::from_utf8_lossy(&bytes[start..i]).to_string();
-                    names.push(name);
-                    i += 1; // skip closing quote
-                }
-            }
-        } else {
-            i += 1;
-        }
-    }
-}
-
 /// Parse and evaluate a format template string, returning the rendered output.
 pub fn evaluate(template: &str, engine: &ScriptEngine) -> Result<String, ScriptError> {
     let parts = parse(template);
