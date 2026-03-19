@@ -3,6 +3,7 @@
 //! All Rhai-callable functions are defined and registered here.
 //! Organized by API group as submodules.
 
+pub mod battery;
 pub mod cache;
 pub mod color;
 pub mod command;
@@ -20,6 +21,7 @@ pub fn register_all(engine: &mut ScriptEngine, config: &Config, cmds: &[CmdDef])
 
     environment::register(rhai);
     filesystem::register(rhai);
+    battery::register(rhai);
     command::register(rhai);
     git::register(rhai);
     color::register(rhai, &config.colors);

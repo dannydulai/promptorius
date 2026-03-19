@@ -250,5 +250,6 @@ fn stdlib_scripts() -> HashMap<String, &'static str> {
     m.insert("character.rhai".to_string(), include_str!("../../stdlib/character.rhai"));
     m.insert("jobs.rhai".to_string(), include_str!("../../stdlib/jobs.rhai"));
     m.insert("user_host.rhai".to_string(), include_str!("../../stdlib/user_host.rhai"));
+    m.insert("battery.rhai".to_string(), include_str!("../../stdlib/battery.rhai"));
     m
 }
