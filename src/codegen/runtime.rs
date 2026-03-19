@@ -479,43 +479,57 @@ fn builtin_dir_search_upwards(name: &Value) -> Value {
 }
 
 // --- Git (via libgit2) ---
+// Cache the repository handle — discover() walks the directory tree and is expensive.
+thread_local! {
+    static GIT_REPO: std::cell::RefCell<Option<git2::Repository>> = std::cell::RefCell::new(None);
+}
+
+fn with_git_repo<F, T>(f: F) -> Option<T>
+where F: FnOnce(&git2::Repository) -> T {
+    GIT_REPO.with(|cell| {
+        let mut cached = cell.borrow_mut();
+        if cached.is_none() {
+            *cached = git2::Repository::discover(".").ok();
+        }
+        cached.as_ref().map(f)
+    })
+}
+
 fn builtin_git_is_repo() -> Value {
-    Value::Bool(git2::Repository::discover(".").is_ok())
+    Value::Bool(with_git_repo(|_| ()).is_some())
 }
 
 fn builtin_git_branch() -> Value {
-    let repo = match git2::Repository::discover(".") {
-        Ok(r) => r, Err(_) => return Value::Str(String::new()),
-    };
-    if let Ok(head) = repo.head() {
-        if let Some(name) = head.shorthand() {
-            return Value::Str(name.to_string());
+    with_git_repo(|repo| {
+        if let Ok(head) = repo.head() {
+            if let Some(name) = head.shorthand() {
+                return Value::Str(name.to_string());
+            }
+            if let Some(oid) = head.target() {
+                let hex = oid.to_string();
+                return Value::Str(hex[..7.min(hex.len())].to_string());
+            }
         }
-        if let Some(oid) = head.target() {
-            let hex = oid.to_string();
-            return Value::Str(hex[..7.min(hex.len())].to_string());
-        }
-    }
-    Value::Str(String::new())
+        Value::Str(String::new())
+    }).unwrap_or_else(|| Value::Str(String::new()))
 }
 
 fn builtin_git_root() -> Value {
-    Value::Str(git2::Repository::discover(".")
-        .ok().and_then(|r| r.workdir().map(|p| {
+    with_git_repo(|repo| {
+        repo.workdir().map(|p| {
             let s = p.to_string_lossy().into_owned();
-            s.strip_suffix('/').unwrap_or(&s).to_string()
-        }))
-        .unwrap_or_default())
+            Value::Str(s.strip_suffix('/').unwrap_or(&s).to_string())
+        }).unwrap_or(Value::Str(String::new()))
+    }).unwrap_or_else(|| Value::Str(String::new()))
 }
 
 fn builtin_git_origin() -> Value {
-    let repo = match git2::Repository::discover(".") {
-        Ok(r) => r, Err(_) => return Value::Str(String::new()),
-    };
-    let url = repo.find_remote("origin")
-        .ok()
-        .and_then(|r| r.url().map(|s| s.to_string()));
-    Value::Str(url.unwrap_or_default())
+    with_git_repo(|repo| {
+        let url = repo.find_remote("origin")
+            .ok()
+            .and_then(|r| r.url().map(|s| s.to_string()));
+        Value::Str(url.unwrap_or_default())
+    }).unwrap_or_else(|| Value::Str(String::new()))
 }
 
 fn builtin_git_status() -> Value {
@@ -523,44 +537,54 @@ fn builtin_git_status() -> Value {
     for k in &["modified", "staged", "untracked", "conflicts", "ahead", "behind"] {
         map.insert(k.to_string(), Value::Number(0.0));
     }
-    let repo = match git2::Repository::discover(".") {
-        Ok(r) => r, Err(_) => return Value::Dict(map),
-    };
-    let statuses = match repo.statuses(None) {
-        Ok(s) => s, Err(_) => return Value::Dict(map),
-    };
-    let (mut modified, mut staged, mut untracked, mut conflicts) = (0.0, 0.0, 0.0, 0.0);
-    for entry in statuses.iter() {
-        let s = entry.status();
-        if s.is_conflicted() { conflicts += 1.0; }
-        else if s.is_wt_new() { untracked += 1.0; }
-        else {
-            if s.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED
-                | git2::Status::INDEX_DELETED | git2::Status::INDEX_RENAMED
-                | git2::Status::INDEX_TYPECHANGE) { staged += 1.0; }
-            if s.intersects(git2::Status::WT_MODIFIED | git2::Status::WT_DELETED
-                | git2::Status::WT_TYPECHANGE | git2::Status::WT_RENAMED) { modified += 1.0; }
+    let result = with_git_repo(|repo| {
+        let statuses = match repo.statuses(None) {
+            Ok(s) => s, Err(_) => return map.clone(),
+        };
+        let (mut modified, mut staged, mut untracked, mut conflicts) = (0.0, 0.0, 0.0, 0.0);
+        for entry in statuses.iter() {
+            let s = entry.status();
+            if s.is_conflicted() { conflicts += 1.0; }
+            else if s.is_wt_new() { untracked += 1.0; }
+            else {
+                if s.intersects(git2::Status::INDEX_NEW | git2::Status::INDEX_MODIFIED
+                    | git2::Status::INDEX_DELETED | git2::Status::INDEX_RENAMED
+                    | git2::Status::INDEX_TYPECHANGE) { staged += 1.0; }
+                if s.intersects(git2::Status::WT_MODIFIED | git2::Status::WT_DELETED
+                    | git2::Status::WT_TYPECHANGE | git2::Status::WT_RENAMED) { modified += 1.0; }
+            }
         }
-    }
-    map.insert("modified".to_string(), Value::Number(modified));
-    map.insert("staged".to_string(), Value::Number(staged));
-    map.insert("untracked".to_string(), Value::Number(untracked));
-    map.insert("conflicts".to_string(), Value::Number(conflicts));
-    if let Ok(head) = repo.head() {
-        if let Some(local_oid) = head.target() {
-            if let Ok(branch) = repo.find_branch(head.shorthand().unwrap_or(""), git2::BranchType::Local) {
-                if let Ok(upstream) = branch.upstream() {
-                    if let Some(upstream_oid) = upstream.get().target() {
-                        if let Ok((ahead, behind)) = repo.graph_ahead_behind(local_oid, upstream_oid) {
-                            map.insert("ahead".to_string(), Value::Number(ahead as f64));
-                            map.insert("behind".to_string(), Value::Number(behind as f64));
+        let mut m = HashMap::new();
+        m.insert("modified".to_string(), Value::Number(modified));
+        m.insert("staged".to_string(), Value::Number(staged));
+        m.insert("untracked".to_string(), Value::Number(untracked));
+        m.insert("conflicts".to_string(), Value::Number(conflicts));
+
+        let mut ahead = 0.0_f64;
+        let mut behind = 0.0_f64;
+        if let Ok(head) = repo.head() {
+            if let Some(local_oid) = head.target() {
+                if let Ok(branch) = repo.find_branch(head.shorthand().unwrap_or(""), git2::BranchType::Local) {
+                    if let Ok(upstream) = branch.upstream() {
+                        if let Some(upstream_oid) = upstream.get().target() {
+                            if let Ok((a, b)) = repo.graph_ahead_behind(local_oid, upstream_oid) {
+                                ahead = a as f64;
+                                behind = b as f64;
+                            }
                         }
                     }
                 }
             }
         }
+        m.insert("ahead".to_string(), Value::Number(ahead));
+        m.insert("behind".to_string(), Value::Number(behind));
+        m
+    });
+    if let Some(m) = result {
+        Value::Dict(m)
+    } else {
+        Value::Dict(map)
     }
-    Value::Dict(map)
 }
 
 // --- Battery ---
@@ -775,7 +799,7 @@ fn value_method_call(obj: &Value, method: &str, args: Vec<Value>) -> Value {
             }
             _ => Value::Null,
         },
-        Value::Regex(re, flags) => match method {
+        Value::Regex(re, _flags) => match method {
             "test" => {
                 let s = args.first().map(|a| a.to_str()).unwrap_or_default();
                 Value::Bool(re.is_match(&s))
@@ -854,7 +878,7 @@ fn time_to_parts(epoch: u64) -> TimeParts {
     // Simple UTC time calculation (no TZ support — use libc for local time)
     let secs = epoch as i64;
     unsafe {
-        let t = libc::time(std::ptr::null_mut());
+        let _t = libc::time(std::ptr::null_mut());
         let tm = libc::localtime(&secs as *const i64 as *const libc::time_t);
         if tm.is_null() {
             return TimeParts { year: 1970, mon: 1, day: 1, hour: 0, min: 0, sec: 0 };
@@ -879,6 +903,58 @@ fn format_time(tm: &TimeParts, fmt: &str) -> String {
        .replace("%S", &format!("{:02}", tm.sec))
        .replace("%I", &format!("{:02}", if tm.hour % 12 == 0 { 12 } else { tm.hour % 12 }))
        .replace("%p", if tm.hour < 12 { "AM" } else { "PM" })
+}
+
+// --- Visible width calculation ---
+fn char_width(c: char) -> usize {
+    let cp = c as u32;
+    match cp {
+        // Zero-width characters
+        0x0000..=0x001F | 0x007F..=0x009F => 0, // C0/C1 control
+        0x200B..=0x200F | 0x2028..=0x202E | 0xFEFF => 0, // zero-width, direction
+        0xFE00..=0xFE0F | 0xE0100..=0xE01EF => 0, // variation selectors
+        // Combining marks (Mn, Mc, Me — major blocks)
+        0x0300..=0x036F | 0x1AB0..=0x1AFF | 0x1DC0..=0x1DFF | 0x20D0..=0x20FF => 0,
+        0xFE20..=0xFE2F => 0,
+        // Double-width: CJK and fullwidth forms
+        0x1100..=0x115F | 0x2329..=0x232A => 2, // Hangul Jamo, angle brackets
+        0x2E80..=0x303E => 2, // CJK radicals, kangxi, ideographic symbols
+        0x3041..=0x33BF => 2, // Hiragana, Katakana, Bopomofo, Hangul compat, Kanbun, CJK letters
+        0x3400..=0x4DBF => 2, // CJK Extension A
+        0x4E00..=0xA4CF => 2, // CJK Unified Ideographs, Yi
+        0xA960..=0xA97F => 2, // Hangul Jamo Extended-A
+        0xAC00..=0xD7AF => 2, // Hangul Syllables
+        0xF900..=0xFAFF => 2, // CJK Compatibility Ideographs
+        0xFE10..=0xFE19 => 2, // Vertical forms
+        0xFE30..=0xFE6F => 2, // CJK Compatibility Forms + Small Forms
+        0xFF01..=0xFF60 => 2, // Fullwidth Latin + Halfwidth CJK punctuation
+        0xFFE0..=0xFFE6 => 2, // Fullwidth signs
+        0x1F000..=0x1FAFF => 2, // Emoji and symbols
+        0x20000..=0x2FA1F => 2, // CJK Extension B–F, Compat Supplement
+        0x30000..=0x3134F => 2, // CJK Extension G
+        _ => 1,
+    }
+}
+
+fn visible_width(s: &str) -> usize {
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut width = 0;
+    let mut i = 0;
+    while i < len {
+        if bytes[i] == 0x1b && i + 1 < len && bytes[i + 1] == b'[' {
+            i += 2;
+            while i < len {
+                if bytes[i] == b'm' { i += 1; break; }
+                i += 1;
+            }
+        } else {
+            let c = s[i..].chars().next().unwrap();
+            width += char_width(c);
+            i += c.len_utf8();
+        }
+    }
+    width
 }
 
 // --- Shell escape wrapping ---
@@ -931,12 +1007,16 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut scope = Scope::new();
     let mut right = false;
+    let mut columns: Option<usize> = None;
 
-    // Parse --var name:value and --right
+    // Parse --var name:value, --right, and --columns N
     let mut i = 1;
     while i < args.len() {
         if args[i] == "--right" {
             right = true;
+        } else if args[i] == "--columns" && i + 1 < args.len() {
+            i += 1;
+            columns = args[i].parse().ok();
         } else if args[i] == "--var" && i + 1 < args.len() {
             i += 1;
             if let Some((name, value)) = args[i].split_once(':') {
@@ -956,13 +1036,33 @@ fn main() {
         user_fn_left_prompt(&mut scope)
     };
 
-    // Wrap ANSI escapes for shell compatibility
-    let output = result.to_str();
+    let raw_output = result.to_str();
     let shell = scope.get("shell").to_str();
+
+    // Right-align when --right --columns is given (for shells without native RPROMPT)
+    if right && !raw_output.is_empty() {
+        if let Some(cols) = columns {
+            let w = visible_width(&raw_output);
+            if w < cols {
+                let col = cols - w + 1;
+                // Build: <move-to-col> <content> <carriage-return>
+                // Then wrap all ANSI escapes (including positioning) for the shell
+                let positioned = format!("\x1b[{col}G{raw_output}\r");
+                let output = if !shell.is_empty() {
+                    wrap_escapes_for_shell(&positioned, &shell)
+                } else {
+                    positioned
+                };
+                print!("{output}");
+                return;
+            }
+        }
+    }
+
     let output = if !shell.is_empty() {
-        wrap_escapes_for_shell(&output, &shell)
+        wrap_escapes_for_shell(&raw_output, &shell)
     } else {
-        output
+        raw_output
     };
 
     print!("{output}");

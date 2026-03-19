@@ -55,6 +55,8 @@ pub enum SubCommand {
         #[arg(long)]
         right: bool,
     },
+    /// Print current time as epoch milliseconds.
+    Time,
     /// Generate shell completions.
     Completions {
         /// Shell name: bash, zsh, fish.
@@ -105,6 +107,12 @@ pub fn run(args: Args) -> Result<(), CliError> {
         }
         Some(SubCommand::Explain { vars, right }) => {
             run_explain(&vars, right)
+        }
+        Some(SubCommand::Time) => {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            let ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
+            println!("{ms}");
+            Ok(())
         }
         Some(SubCommand::Completions { shell }) => {
             run_completions(&shell);
