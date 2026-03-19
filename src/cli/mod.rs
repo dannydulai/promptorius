@@ -150,15 +150,23 @@ fn run_check(script_path: &std::path::Path) -> Result<(), CliError> {
 }
 
 fn run_explain(vars: &[String], right: bool) -> Result<(), CliError> {
-    // For now, just compile and run with timing
     let script_path = compiler::ensure_default_config()
         .unwrap_or_else(|_| compiler::default_script_path());
     let output_path = compiler::data_dir().join("__promptorius_explanation");
 
-    // Compile
-    compiler::compile(&script_path, &output_path)?;
+    // Compile instrumented binary
+    let source = std::fs::read_to_string(&script_path)?;
+    let program = crate::lang::parser::Parser::parse(&source)?;
+    let rust_source = crate::codegen::generate_instrumented(&program);
 
-    // Run with timing
+    let build_dir = crate::compiler::project::ensure_build_project()?;
+    crate::compiler::project::write_source(&build_dir, &rust_source)?;
+
+    eprintln!("promptorius: building instrumented binary");
+    crate::compiler::project::build(&build_dir)?;
+    crate::compiler::project::copy_binary(&build_dir, &output_path)?;
+
+    // Run the instrumented binary
     let mut cmd = std::process::Command::new(&output_path);
     if right {
         cmd.arg("--right");
@@ -167,21 +175,10 @@ fn run_explain(vars: &[String], right: bool) -> Result<(), CliError> {
         cmd.arg("--var").arg(v);
     }
 
-    let start = std::time::Instant::now();
-    let output = cmd.output()?;
-    let elapsed = start.elapsed();
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-
-    if !stderr.is_empty() {
-        eprint!("{stderr}");
+    let status = cmd.status()?;
+    if !status.success() {
+        eprintln!("promptorius: explain binary exited with {status}");
     }
-
-    println!("--- promptorius explain ---");
-    println!("binary execution: {:.2}ms", elapsed.as_secs_f64() * 1000.0);
-    println!("output length: {} bytes", stdout.len());
-    println!("---");
 
     Ok(())
 }

@@ -808,3 +808,68 @@ fn main() {
     print!("{output}");
 }
 "##;
+
+/// Instrumented main() for explain — wraps each phase with timing.
+pub const EXPLAIN_MAIN_FN: &str = r##"
+fn main() {
+    use std::time::Instant;
+
+    let total_start = Instant::now();
+    let args: Vec<String> = std::env::args().collect();
+    let mut scope = Scope::new();
+    let mut right = false;
+
+    // Parse --var name:value and --right
+    let mut i = 1;
+    while i < args.len() {
+        if args[i] == "--right" {
+            right = true;
+        } else if args[i] == "--var" && i + 1 < args.len() {
+            i += 1;
+            if let Some((name, value)) = args[i].split_once(':') {
+                scope.set(name, Value::Str(value.to_string()));
+            }
+        }
+        i += 1;
+    }
+
+    // Time script_init
+    let t = Instant::now();
+    script_init(&mut scope);
+    let init_us = t.elapsed().as_micros();
+
+    // Time prompt function
+    let t = Instant::now();
+    let result = if right {
+        user_fn_right_prompt(&mut scope)
+    } else {
+        user_fn_left_prompt(&mut scope)
+    };
+    let prompt_us = t.elapsed().as_micros();
+
+    // Time shell escape wrapping
+    let t = Instant::now();
+    let output = result.to_str();
+    let shell = scope.get("shell").to_str();
+    let output = if !shell.is_empty() {
+        wrap_escapes_for_shell(&output, &shell)
+    } else {
+        output
+    };
+    let wrap_us = t.elapsed().as_micros();
+
+    let total_us = total_start.elapsed().as_micros();
+
+    // Print timing breakdown
+    println!("--- promptorius explain ---");
+    println!();
+    println!("  {:>7.2}ms  script_init", init_us as f64 / 1000.0);
+    println!("  {:>7.2}ms  {} ", prompt_us as f64 / 1000.0,
+        if right { "right_prompt()" } else { "left_prompt()" });
+    println!("  {:>7.2}ms  shell escape wrapping", wrap_us as f64 / 1000.0);
+    println!();
+    println!("  {:>7.2}ms  total", total_us as f64 / 1000.0);
+    println!("  {:>7}    output bytes", output.len());
+    println!("---");
+}
+"##;

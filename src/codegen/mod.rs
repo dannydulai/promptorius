@@ -67,6 +67,67 @@ pub fn generate(program: &Program) -> String {
     output
 }
 
+/// Generate an instrumented version for `promptorius explain`.
+/// Wraps script_init, left_prompt, right_prompt with timing.
+pub fn generate_instrumented(program: &Program) -> String {
+    let mut output = String::new();
+
+    let mut fn_defs = Vec::new();
+    let mut top_stmts = Vec::new();
+
+    for s in &program.stmts {
+        match s {
+            Stmt::FnDef { .. } => fn_defs.push(s),
+            _ => top_stmts.push(s),
+        }
+    }
+
+    // Emit runtime
+    output.push_str(runtime::RUNTIME);
+    output.push('\n');
+
+    // Emit user functions (same as normal)
+    for f in &fn_defs {
+        if let Stmt::FnDef {
+            name, params, body, ..
+        } = f
+        {
+            output.push_str(&gen_fn_def(name, params, body));
+            output.push('\n');
+        }
+    }
+
+    // Emit script_init (same as normal)
+    output.push_str("fn script_init(scope: &mut Scope) {\n");
+    for f in &fn_defs {
+        if let Stmt::FnDef { name, params, .. } = f {
+            let n = params.len();
+            let mangled = mangle_ident(name);
+            output.push_str(&format!(
+                "    scope.set(\"{name}\", Value::Closure(Arc::new(move |__args: Vec<Value>| -> Value {{ \
+                    let mut __scope = Scope::new(); \
+                    user_fn_{mangled}(&mut __scope, {arg_unpack}) \
+                }})));\n",
+                arg_unpack = (0..n)
+                    .map(|i| format!("__args.get({i}).cloned().unwrap_or(Value::Null)"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ));
+        }
+    }
+    for s in &top_stmts {
+        output.push_str("    ");
+        output.push_str(&stmt::gen_stmt(s));
+        output.push('\n');
+    }
+    output.push_str("}\n\n");
+
+    // Emit instrumented main
+    output.push_str(runtime::EXPLAIN_MAIN_FN);
+
+    output
+}
+
 /// Generate a Rust function from a script function definition.
 fn gen_fn_def(name: &str, params: &[String], body: &[Stmt]) -> String {
     let param_list: Vec<String> = params

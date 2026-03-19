@@ -1,6 +1,6 @@
 //! Compiler orchestration: parse → codegen → cargo build.
 
-mod project;
+pub mod project;
 
 use crate::codegen;
 use crate::lang::parser::Parser;
