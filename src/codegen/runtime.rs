@@ -501,7 +501,10 @@ fn builtin_git_branch() -> Value {
 
 fn builtin_git_root() -> Value {
     Value::Str(git2::Repository::discover(".")
-        .ok().and_then(|r| r.workdir().map(|p| p.to_string_lossy().into_owned()))
+        .ok().and_then(|r| r.workdir().map(|p| {
+            let s = p.to_string_lossy().into_owned();
+            s.strip_suffix('/').unwrap_or(&s).to_string()
+        }))
         .unwrap_or_default())
 }
 
