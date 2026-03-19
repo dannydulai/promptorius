@@ -200,6 +200,7 @@ fn gen_call(callee: &Expr, args: &[Expr]) -> String {
                 ("git", "branch") => Some(("builtin_git_branch", 0)),
                 ("git", "root") => Some(("builtin_git_root", 0)),
                 ("git", "status") => Some(("builtin_git_status", 0)),
+                ("git", "origin") => Some(("builtin_git_origin", 0)),
                 ("file", "exists") => Some(("builtin_file_exists", 1)),
                 ("file", "read") => Some(("builtin_file_read", 1)),
                 ("file", "write") => Some(("builtin_file_write", 2)),

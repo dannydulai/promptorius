@@ -508,6 +508,16 @@ fn builtin_git_root() -> Value {
         .unwrap_or_default())
 }
 
+fn builtin_git_origin() -> Value {
+    let repo = match git2::Repository::discover(".") {
+        Ok(r) => r, Err(_) => return Value::Str(String::new()),
+    };
+    match repo.find_remote("origin") {
+        Ok(remote) => Value::Str(remote.url().unwrap_or("").to_string()),
+        Err(_) => Value::Str(String::new()),
+    }
+}
+
 fn builtin_git_status() -> Value {
     let mut map = HashMap::new();
     for k in &["modified", "staged", "untracked", "conflicts", "ahead", "behind"] {
