@@ -16,8 +16,7 @@ pub struct Lexer {
     pos: usize,
     line: usize,
     col: usize,
-    /// The last significant (non-newline, non-whitespace) token emitted.
-    /// Used for regex vs division disambiguation.
+    /// The last significant token emitted (for ASI / newline handling).
     prev_token: Option<Token>,
 }
 
@@ -134,19 +133,7 @@ impl Lexer {
             '0'..='9' => self.lex_number()?,
             '"' | '\'' => self.lex_string()?,
             '`' => self.lex_backtick()?,
-            '/' => {
-                // Regex or division?
-                let is_div = self
-                    .prev_token
-                    .as_ref()
-                    .map(|t| t.is_division_context())
-                    .unwrap_or(false);
-                if is_div {
-                    self.lex_operator()?
-                } else {
-                    self.lex_regex()?
-                }
-            }
+            '/' => self.lex_operator()?,
             'a'..='z' | 'A'..='Z' | '_' => self.lex_ident_or_keyword()?,
             '+' | '-' | '*' | '%' | '=' | '!' | '<' | '>' | '&' | '|' | '?' | '.' => {
                 self.lex_operator()?
@@ -519,58 +506,6 @@ impl Lexer {
         Ok(expr)
     }
 
-    fn lex_regex(&mut self) -> Result<Spanned, LexError> {
-        let span = self.span();
-        self.advance(); // consume opening /
-
-        let mut pattern = String::new();
-        let mut in_class = false; // inside [...] character class
-
-        loop {
-            match self.advance() {
-                None => {
-                    return Err(LexError {
-                        msg: "unterminated regex".to_string(),
-                        line: span.line,
-                        col: span.col,
-                    });
-                }
-                Some('\\') => {
-                    pattern.push('\\');
-                    if let Some(c) = self.advance() {
-                        pattern.push(c);
-                    }
-                }
-                Some('[') => {
-                    in_class = true;
-                    pattern.push('[');
-                }
-                Some(']') => {
-                    in_class = false;
-                    pattern.push(']');
-                }
-                Some('/') if !in_class => break,
-                Some(c) => pattern.push(c),
-            }
-        }
-
-        // Collect flags
-        let mut flags = String::new();
-        while let Some(ch) = self.peek() {
-            if matches!(ch, 'i' | 'g' | 'm') {
-                flags.push(ch);
-                self.advance();
-            } else {
-                break;
-            }
-        }
-
-        Ok(Spanned {
-            token: Token::Regex(pattern, flags),
-            span,
-        })
-    }
-
     fn lex_ident_or_keyword(&mut self) -> Result<Spanned, LexError> {
         let span = self.span();
         let start = self.pos;
@@ -859,24 +794,6 @@ mod tests {
         assert_eq!(
             tokens("`{{literal}}`"),
             vec![Token::String("{literal}".to_string())]
-        );
-    }
-
-    #[test]
-    fn lex_regex() {
-        assert_eq!(
-            tokens("/^hello/i"),
-            vec![Token::Regex("^hello".to_string(), "i".to_string())]
-        );
-    }
-
-    #[test]
-    fn lex_regex_vs_division() {
-        // After a number, / is division
-        let toks = tokens("5 / 2");
-        assert_eq!(
-            toks,
-            vec![Token::Number(5.0), Token::Slash, Token::Number(2.0)]
         );
     }
 

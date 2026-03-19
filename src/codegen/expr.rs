@@ -110,18 +110,6 @@ pub fn gen_expr(expr: &Expr) -> String {
             )
         }
 
-        Expr::Regex(pattern, flags, _) => {
-            let escaped = pattern.replace('\\', "\\\\").replace('"', "\\\"");
-            let pat = if flags.contains('i') {
-                format!("(?i){escaped}")
-            } else {
-                escaped
-            };
-            format!(
-                "Value::Regex(regex::Regex::new(\"{pat}\").unwrap(), \"{flags}\".to_string())"
-            )
-        }
-
         Expr::Interpolation(parts, _) => {
             let mut exprs = Vec::new();
             for part in parts {

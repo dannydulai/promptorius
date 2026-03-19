@@ -127,9 +127,6 @@ pub enum Expr {
     /// Dict literal: { key: value, ... }.
     Dict(Vec<(String, Expr)>, Span),
 
-    /// Regex literal: /pattern/flags.
-    Regex(String, String, Span),
-
     /// Backtick interpolation string: `hello {expr} world`.
     Interpolation(Vec<InterpPart>, Span),
 

@@ -711,10 +711,6 @@ impl Parser {
                 self.advance();
                 Ok(Expr::Literal(Literal::Null, span))
             }
-            Token::Regex(pattern, flags) => {
-                self.advance();
-                Ok(Expr::Regex(pattern, flags, span))
-            }
             Token::Ident(name) => {
                 self.advance();
                 Ok(Expr::Ident(name, span))
@@ -1001,12 +997,6 @@ mod tests {
             Expr::Dict(entries, _) => assert_eq!(entries.len(), 2),
             _ => panic!("expected Dict"),
         }
-    }
-
-    #[test]
-    fn parse_regex() {
-        let e = parse_expr("/^hello/i");
-        assert!(matches!(e, Expr::Regex(p, f, _) if p == "^hello" && f == "i"));
     }
 
     #[test]

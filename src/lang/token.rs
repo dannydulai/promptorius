@@ -25,7 +25,6 @@ pub enum Token {
     InterpExprStart,      // `{` inside backtick
     InterpExprEnd,        // `}` inside backtick
     InterpEnd,            // closing backtick
-    Regex(String, String), // (pattern, flags)
     True,
     False,
     Null,
@@ -97,7 +96,6 @@ impl Token {
                 | Token::Number(_)
                 | Token::String(_)
                 | Token::InterpEnd
-                | Token::Regex(..)
                 | Token::True
                 | Token::False
                 | Token::Null
@@ -108,20 +106,4 @@ impl Token {
         )
     }
 
-    /// Returns true if `/` after this token should be treated as division (not regex start).
-    pub fn is_division_context(&self) -> bool {
-        matches!(
-            self,
-            Token::Ident(_)
-                | Token::Number(_)
-                | Token::String(_)
-                | Token::InterpEnd
-                | Token::Regex(..)
-                | Token::True
-                | Token::False
-                | Token::Null
-                | Token::RParen
-                | Token::RBracket
-        )
-    }
 }
