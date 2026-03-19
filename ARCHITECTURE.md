@@ -1,91 +1,51 @@
 # Architecture
 
-## Overview
+Promptorius is a compiled prompt engine. A custom scripting language compiles to native Rust binaries via a persistent cargo project.
 
-Promptorius is structured as a pipeline: parse config, resolve segments, execute scripts concurrently, render output.
+## Pipeline
 
 ```
-CLI args
-  │
-  ▼
-Config (TOML)  ──►  Pipeline  ──►  Renderer  ──►  stdout
-                       │
-                   Script Engine
-                   (Rhai + Host API)
+config script → Lexer → Parser → AST → Codegen → Rust source → cargo build → native binary
 ```
 
 ## Modules
 
-### `cli` — Command-line interface
-- Parses args with `clap` (derive API)
-- Handles `--right`, `--cmd`, subcommands (`init`, `explain`, `check`, `script new`, `completions`)
-- Calls into `pipeline` for prompt rendering
-- **Depends on**: `config`, `pipeline`
+### `lang/` — Language toolchain
 
-### `config` — Configuration
-- Reads and validates `$XDG_CONFIG_HOME/promptorius/config.toml`
-- Produces typed structs: `Config`, `PromptConfig`, `SegmentConfig`, `ColorDef`, `Settings`
-- Resolves script paths (user scripts dir > additional `script_path` entries > stdlib)
-- **Depends on**: nothing (leaf module)
+- **`token.rs`** — Token enum with span tracking. Handles ASI (automatic semicolon insertion) via `can_end_stmt()`.
+- **`lexer.rs`** — Tokenizer. `#` comments, three string types (double/single/backtick), backtick interpolation with `{expr}`, optional semicolons, all operators including `===`/`!==`/`??`/`..`.
+- **`ast.rs`** — AST node types. Expressions (literal, ident, binary, unary, ternary, call, member, index, assign, compound assign, array, dict, interpolation, closure, range, null coalesce) and statements (expr, if/else, while, for-in, return, fn def).
+- **`parser.rs`** — Recursive descent with precedence climbing. Assignment → ternary → null coalesce → or → and → equality → comparison → addition → multiplication → unary → postfix → primary.
 
-### `script` — Rhai engine
-- Creates and configures the `rhai::Engine`
-- Registers string coercion overloads (`String + i64`, etc.)
-- Loads `.rhai` files, compiles to AST, caches compiled scripts
-- Evaluates scripts and format template expressions
-- **Depends on**: `config` (for script paths and segment config)
+### `codegen/` — Rust code generation
 
-### `host` — Host API
-- Registers all Rhai-callable functions into the engine: `env`, `env_set`, `cwd`, `os`, `file_exists`, `read_file`, `glob_files`, `find_upward`, `exec`, `exec_ok`, `git_*`, `color`, `icon`, `cache_*`, `config`
-- Registers `--cmd`-defined functions
-- Each API group (environment, filesystem, command, git, color, cache) is a submodule
-- **Depends on**: `config` (for color palette), `script` (for engine registration)
+- **`mod.rs`** — Top-level orchestration. Separates fn defs from top-level stmts. Emits runtime + user functions + `script_init()` (registers fns as closures + runs top-level code) + `main()`. Also has `generate_instrumented()` for explain.
+- **`runtime.rs`** — The complete Rust runtime as a `const &str`. ~800 lines covering: Value enum, type coercion, operators, Scope, color system, all built-in functions (env, file, dir, git, battery, exec, regex, spawn/wait, string/array/dict methods), shell escape wrapping, and main() template.
+- **`expr.rs`** — Expression codegen. Maps AST expressions to Rust code producing `Value`. Handles builtin detection (namespaced like `git.branch()` and global like `env()`), dynamic dispatch for unknown calls, IIFE inlining, member/index assignment.
+- **`stmt.rs`** — Statement codegen. If/while/for-in/return/assignment/fn-def.
 
-### `pipeline` — Segment pipeline
-- Resolves which segments to run from config
-- Executes segment scripts concurrently (thread pool)
-- Evaluates format template, calling `s("name")` to retrieve segment output
-- Enforces global timeout
-- **Depends on**: `config`, `script`, `host`, `render`
+### `compiler/` — Build orchestration
 
-### `render` — ANSI rendering
-- Converts color names/definitions to ANSI escape sequences
-- Handles kitty underline protocol
-- Computes unicode display width for right-prompt alignment
-- **Depends on**: nothing (leaf module)
+- **`mod.rs`** — `compile()`, `is_stale()`, `clean()`, path helpers, default config creation.
+- **`project.rs`** — Manages the persistent cargo project in `$XDG_DATA_HOME/promptorius/build/`. Writes `Cargo.toml` (with git2, starship-battery, glob, regex deps), generated `src/main.rs`, runs `cargo build --release`, copies binary.
 
-## Dependency graph
+### `cli/` — Command-line interface
 
-```
-cli
- └── pipeline
-      ├── script
-      │    └── config
-      ├── host
-      │    ├── config
-      │    └── script
-      ├── config
-      └── render
-```
+- Subcommands: `compile`, `clean`, `init`, `check`, `explain`, `completions`.
+- Default (no subcommand) runs `compile`.
 
-Cycles are not permitted. `config` and `render` are leaf modules with no internal dependencies.
+### `shell/` — Shell init scripts
 
-## Data flow for a prompt render
+- `zsh.sh`, `bash.sh`, `fish.fish`, `nushell.nu`
+- Each handles: staleness check, auto-recompile, duration timing, job count, vi keymap, exit code suppression on empty enter.
 
-1. `cli` parses args, extracts `--cmd` definitions and `--right` flag
-2. `config` loads and validates TOML
-3. `pipeline` resolves segment list from format template
-4. `host` registers all functions (built-in + `--cmd` defined) into `script` engine
-5. `pipeline` spawns concurrent script evaluations via `script` engine
-6. Each script calls `host` functions as needed, returns a string or `()`
-7. `pipeline` evaluates the format template expression, calling `s("name")` for each segment
-8. `render` converts the final string's color markers to ANSI escapes
-9. `cli` writes to stdout
+### Legacy (to be removed)
 
-## Performance constraints
+- `config/`, `host/`, `pipeline/`, `render/`, `script/`, `stdlib/` — the old Rhai-based engine. Still compiles but unused by the new CLI.
 
-- Total render time budget: 50ms
-- Per-`exec` call timeout: 10ms (configurable)
-- Git operations use `git2` (libgit2), not subprocess
-- Rhai ASTs are compiled once and cached on disk
-- `git_status()`, `cwd()`, etc. are computed once per render and shared across segments
+## Key invariants
+
+1. **All non-builtin calls are dynamic.** The codegen never generates static `user_fn_*()` calls from script code. User functions are registered as closures in scope during `script_init()`, and all calls go through scope lookup.
+2. **IIFEs are inlined.** `fn() { body }()` does NOT generate a Rust closure — the body is emitted as a Rust block directly, preserving scope mutation.
+3. **The runtime is self-contained.** The generated `main.rs` is a complete Rust program with no external code beyond crate deps. The runtime is embedded as a string constant in the promptorius compiler.
+4. **Named colors use ANSI codes, hex uses truecolor.** `"red"` → `\x1b[31m`, `"#ff0000"` → `\x1b[38;2;255;0;0m`.

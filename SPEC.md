@@ -30,7 +30,7 @@ A dynamically-typed scripting language with JavaScript-like coercion, designed f
 ### Basics
 
 ```
-# This is a comment
+# This is a comment (# only, // is not supported)
 
 x = 5
 name = "world"
@@ -39,15 +39,17 @@ greeting = `hello {name}`    # backtick interpolation, no $ needed
 
 - `#` comments to end of line
 - Semicolons optional everywhere
-- Bare assignment creates variables
+- Bare assignment creates variables (`x = 5`, no `let` needed)
 - `null` keyword for unset values
 - `true` / `false` booleans
+- Accessing an undefined variable returns `null` (no errors)
+- Functions require explicit `return`; without it they return `null`
 
 ### Strings
 
 Three string types:
 
-- `"double quoted"` — supports `\n`, `\t`, `\\`, `\"`, `\u{1F600}` escapes
+- `"double quoted"` — supports `\n`, `\t`, `\r`, `\\`, `\"`, `\0`, `\u{1F600}` escapes
 - `'single quoted'` — supports same escapes
 - `` `backtick` `` — interpolation with `{expr}`, use `{{` / `}}` for literal braces
 
@@ -55,7 +57,7 @@ All strings support inline unicode characters.
 
 ### Types
 
-Dynamically typed. Values are: string, number (f64), bool, null, array, dict, regex, closure.
+Dynamically typed. Values are: string, number (f64), bool, null, array, dict, regex, closure, future.
 
 ### Null coercion
 
@@ -92,6 +94,15 @@ Ternary: `cond ? a : b`
 Range: `x..y` (for use in `for` loops)
 Member: `.`, `[]`
 
+Assignment works on variables, dict members, and array indices:
+```
+x = 5          # variable
+d.foo = "bar"  # dict member
+d.foo += "!"   # compound on member
+arr[0] = "x"   # array index
+arr[0] += "y"  # compound on index
+```
+
 ### Control flow
 
 ```
@@ -117,6 +128,8 @@ for (i in 0..10) {
 
 return value
 ```
+
+Note: bare blocks `{ ... }` are not supported. Use `fn() { ... }()` (IIFE) if you need a scope boundary.
 
 ### Scoping
 
@@ -150,24 +163,32 @@ fn greet(name) {
 }
 
 # Closures / anonymous functions
-doubled = arr.map(fn(x) { x * 2 })
+doubled = arr.map(fn(x) { return x * 2 })
 
-# Short closure
-filtered = arr.filter(fn(x) { x > 0 })
+# IIFE for scoping
+fn() {
+    temp = expensive_calc()
+    result += temp
+}()
 ```
+
+Functions require explicit `return`. Without a `return` statement, they return `null`.
+
+Calling a non-function value prints an error to stderr and exits.
 
 ### Arrays
 
 ```
 arr = [1, 2, 3]
-arr.push(4)
-arr.pop()
-arr.shift()
-arr.len()
-arr.map(fn(x) { x * 2 })
-arr.filter(fn(x) { x > 0 })
-arr.reduce(fn(acc, x) { acc + x }, 0)
-first = arr[0]
+arr.push(4)           # returns new array with element added
+arr.pop()             # returns removed last element
+arr.shift()           # returns removed first element
+arr.len()             # length
+arr.map(fn(x) { return x * 2 })
+arr.filter(fn(x) { return x > 0 })
+arr.reduce(fn(acc, x) { return acc + x }, 0)
+first = arr[0]        # index access
+arr[0] = "new"        # index assignment
 ```
 
 ### Dicts
@@ -178,77 +199,64 @@ d = {
     age: 30,
     nested: { foo: "bar" },
 }
-d["name"]
-d.name        # same thing
-d.get("name") # same thing, returns null if missing
-d.keys()
-d.values()
-d.len()
+d["name"]             # index access
+d.name                # member access (same thing)
+d.get("name")         # returns null if missing
+d.keys()              # array of keys
+d.values()            # array of values
+d.len()               # number of entries
+d.foo = "bar"         # member assignment
+d.foo += "!"          # compound member assignment
+d["key"] = "val"      # index assignment
 ```
 
 ### Regular expressions
 
-First-class regex literals, JavaScript-style:
+Created from strings using the `regex()` function (no inline `/pattern/` literals):
 
 ```
-re = /^hello/i
-if (re.test("Hello World")) {
-    # ...
-}
+re = regex("^hello", "i")
+re.test("Hello World")      # true
 match = re.exec("Hello World")
 # match[0] is the full match, match[1]+ are capture groups
 
-result = "hello world".replace(/world/, "promptorius")
-parts = "a,b,c".split(/,/)
+result = "hello world".replace(regex("world"), "promptorius")
+parts = "a,b,c".split(",")
 ```
 
 Flags: `i` (case-insensitive), `g` (global), `m` (multiline).
 
-Create regex from string with `regex(pattern)` or `regex(pattern, flags)`:
-
-```
-pattern = "^hello"
-re = regex(pattern, "i")
-re.test("Hello World")   # true
-```
-
 ## Script structure
 
-The script file is `$XDG_CONFIG_HOME/promptorius/config`.
+The script file is `$XDG_CONFIG_HOME/promptorius/config` (default `~/.config/promptorius/config`).
+
+Two functions are required:
+- `left_prompt()` — returns the left prompt string
+- `right_prompt()` — returns the right prompt string
+
+Everything else (global variables, helper functions, `colors()` call) is top-level code that runs once at startup.
 
 ```
-# Colors — a dict of named colors.
-# Each value is a string (fg only) or a dict with fg, bg, bold, italic, etc.
-colors = {
+# Set up color palette
+colors({
     directory: "#6ec2e8",
     error: { fg: "red", bold: true },
-    char_normal: "#666",
-    char_vicmd: "#ff40c0",
     git_branch: "#e89050",
-}
-colors(colors)
+})
 
-# Helper functions
+# Helper function
 fn git_prompt() {
     if (!git.is_repo()) { return "" }
-    return C("git_branch") + " " + git.branch() + C("")
+    return `{C("git_branch")} {git.branch()}{C("")}`
 }
 
-# Required: return the left prompt string
+# Required
 fn left_prompt() {
-    dir = C("directory") + cwd().replace(env("HOME"), "~") + C("")
-    char = env("USER") == "root" ? "#" : "│"
-    col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
-
-    result = ""
-    if (exit_code != 0) {
-        result += C("error") + "Exited w/ " + exit_code + C("") + "\n"
-    }
-    result += dir + " " + C(col) + char + C("") + " "
-    return result
+    dir = cwd().replace(env("HOME"), "~")
+    return `{C("directory")}{dir}{C("")} > `
 }
 
-# Required: return the right prompt string
+# Required
 fn right_prompt() {
     return git_prompt()
 }
@@ -285,17 +293,17 @@ fn right_prompt() {
 
 | Function | Returns | Description |
 |---|---|---|
-| `spawn(closure)` | future | Run a closure on the thread pool, returns a future |
+| `spawn(closure)` | future | Run a closure on a thread, returns a future |
 | `wait(input)` | dict or array | Wait for futures to resolve. Accepts a dict or array, returns same shape with resolved values. |
 
 ```
-# Run git and battery checks in parallel
-results = wait({
+# Run git operations in parallel
+w = wait({
     branch: spawn(fn() { return git.branch() }),
-    pct: spawn(fn() { return battery.pct() }),
+    status: spawn(fn() { return git.status() }),
 })
-results.branch   # "main"
-results.pct      # 85
+w.branch   # "main"
+w.status   # { modified: 0, staged: 0, ... }
 ```
 
 ### Command execution
@@ -311,7 +319,8 @@ results.pct      # 85
 |---|---|---|
 | `git.is_repo()` | bool | Whether cwd is inside a git repo |
 | `git.branch()` | string | Branch name or short SHA if detached |
-| `git.root()` | string | Root of the git repo |
+| `git.root()` | string | Root of the git repo (no trailing `/`) |
+| `git.origin()` | string | URL of the `origin` remote, `""` if none |
 | `git.status()` | dict | `{ modified, staged, untracked, conflicts, ahead, behind }` |
 
 ### Colors
@@ -321,7 +330,7 @@ results.pct      # 85
 | `colors(dict)` | null | Set the color palette |
 | `C(name)` | string | Emit ANSI escape for named color. `C("")` resets all formatting. |
 
-Each entry in the `setcolors` dict is either a simple string (foreground only) or a dict:
+Each entry in the `colors()` dict is either a simple string (foreground only) or a dict:
 
 | Key | Type | Description |
 |---|---|---|
@@ -338,6 +347,8 @@ Color values: hex `"#ff5f00"`, short hex `"#f50"`, or named:
 `black`, `red`, `green`, `yellow`, `blue`, `magenta`/`purple`, `cyan`, `white`,
 `bright black`, `bright red`, `bright green`, `bright yellow`, `bright blue`,
 `bright magenta`/`bright purple`, `bright cyan`, `bright white`.
+
+Named colors use standard ANSI codes (30-37, 90-97) so they respect your terminal theme. Hex colors use truecolor (24-bit).
 
 ### Battery
 
@@ -375,12 +386,40 @@ Color values: hex `"#ff5f00"`, short hex `"#f50"`, or named:
 | `s.contains(substr)` | Bool |
 | `s.replace(from, to)` | Replace (from can be string or regex) |
 | `s.split(sep)` | Split into array (sep can be string or regex) |
-| `s.slice(start, end)` | Substring |
+| `s.slice(start, end)` | Substring. `end` can be `null` for "to end of string" |
 | `s.to_upper()` | Uppercase |
 | `s.to_lower()` | Lowercase |
 | `s.to_number()` | Parse as number |
 | `s.repeat(n)` | Repeat n times |
 | `s.pad_start(width, char)` | Left-pad with char (default space) to at least width |
+
+### Array methods
+
+| Method | Description |
+|---|---|
+| `a.len()` | Array length |
+| `a.push(val)` | Returns new array with val appended |
+| `a.pop()` | Returns removed last element |
+| `a.shift()` | Returns removed first element |
+| `a.map(fn)` | Returns new array with fn applied to each element |
+| `a.filter(fn)` | Returns new array with elements where fn returns truthy |
+| `a.reduce(fn, init)` | Reduces array to single value. fn receives (accumulator, element) |
+
+### Dict methods
+
+| Method | Description |
+|---|---|
+| `d.len()` | Number of entries |
+| `d.keys()` | Array of keys |
+| `d.values()` | Array of values |
+| `d.get(key)` | Get value by key, returns `null` if missing |
+
+### Regex methods
+
+| Method | Description |
+|---|---|
+| `re.test(str)` | Returns bool — whether the regex matches |
+| `re.exec(str)` | Returns array of captures, or `null` if no match |
 
 ## --var arguments
 
@@ -394,6 +433,17 @@ All variable names are valid — accessing an undefined variable returns `null` 
 
 `--right` flag tells the binary to call `right_prompt()` instead of `left_prompt()`.
 
+### Standard variables (passed by shell integration)
+
+| Variable | Type | Description |
+|---|---|---|
+| `exit_code` | string (coerces to number) | Exit code of the last command. `"0"` if no command ran. |
+| `duration` | string (coerces to number) | Duration of last command in milliseconds |
+| `jobs` | string (coerces to number) | Number of background jobs |
+| `keymap` | string | Vi keymap: `""` (insert/default), `"vicmd"` (normal) |
+| `shell` | string | Shell name: `"zsh"`, `"bash"`, `"fish"`, `"nu"` |
+| `shlvl` | string (coerces to number) | Shell nesting level |
+
 ## Compilation
 
 ### `promptorius compile`
@@ -406,10 +456,9 @@ promptorius compile <script> <output>  # compile specific script to specific out
 What it does:
 1. Parses the script into an AST
 2. Generates a complete Rust source file containing:
-   - The runtime (git, env, color, battery, exec, etc.) as inline Rust code
+   - The runtime (Value type, coercion, all built-in functions) as inline Rust code
    - The compiled script logic as Rust functions
    - A `main()` that parses `--var` / `--right` and calls `left_prompt()` or `right_prompt()`
-   - Generated `--var` arg parser
 3. Builds the binary using a persistent cargo project in `$XDG_DATA_HOME/promptorius/build/`
    - First build: downloads and compiles dependencies (~30s one-time)
    - Subsequent builds: only recompiles the generated source (~1-2s incremental)
@@ -417,7 +466,7 @@ What it does:
 
 ### Build failure handling
 
-If the build fails due to a non-script-syntax issue (e.g. missing system library, corrupted build cache), promptorius shows the error and asks the user if they want to run `promptorius clean` and retry.
+If the build fails due to a non-script-syntax issue (e.g. missing system library, corrupted build cache), promptorius shows the error and suggests running `promptorius clean` to retry.
 
 ### `promptorius clean`
 
@@ -425,7 +474,23 @@ Removes the entire build directory at `$XDG_DATA_HOME/promptorius/build/`, forci
 
 ### `promptorius explain`
 
-Compiles a special instrumented binary `__promptorius_explanation` that wraps each function call with timing, then runs it and displays a breakdown. The explanation binary lives alongside `__promptorius_output` in XDG_DATA_HOME.
+Compiles a special instrumented binary `__promptorius_explanation` that times `script_init()`, `left_prompt()`/`right_prompt()`, and shell escape wrapping separately. Shows a timing breakdown:
+
+```
+--- promptorius explain ---
+
+     0.05ms  script_init
+     0.06ms  left_prompt()
+     0.00ms  shell escape wrapping
+
+     0.15ms  total
+       71    output bytes
+---
+```
+
+### `promptorius check`
+
+Validates script syntax without building. Reports defined functions and warns if `left_prompt` or `right_prompt` are missing.
 
 ### Staleness check
 
@@ -437,7 +502,7 @@ The binary is stale if:
 
 | Crate | Purpose |
 |---|---|
-| `git2` | Native git operations |
+| `git2` | Native git operations (libgit2) |
 | `starship-battery` | Battery status |
 | `glob` | File globbing |
 | `regex` | Regular expressions |
@@ -447,180 +512,86 @@ The binary is stale if:
 ```
 promptorius compile                     # Compile config → default output
 promptorius compile <script> <output>   # Compile specific files
-promptorius init <shell>                # Print shell init script
-promptorius check                       # Validate script syntax
-promptorius explain                     # Build instrumented binary and show timing
+promptorius init <shell>                # Print shell init script (zsh, bash, fish, nushell)
+promptorius check [script]              # Validate script syntax
+promptorius explain [--right] [--var k:v]  # Build instrumented binary and show timing
 promptorius clean                       # Remove build directory
 promptorius completions <shell>         # Generate shell completions
-
-__promptorius_output                    # Render left prompt
-__promptorius_output --right            # Render right prompt
-__promptorius_output --var name:value   # Inject variables
 ```
 
 ## Shell integration
 
-`promptorius init zsh` outputs a script that:
+Supported shells: zsh, bash, fish, nushell.
+
+`promptorius init zsh` outputs a shell script that:
 
 1. On `precmd`: checks if `__promptorius_output` is stale
 2. If stale: runs `promptorius compile` (shows status messages during build)
-3. Calls `__promptorius_output` with `--var` args for exit code, duration, keymap, jobs, shell
+3. Calls `__promptorius_output` with `--var` args for exit code, duration, keymap, jobs, shell, shlvl
 4. Sets `PROMPT` and `RPROMPT`
+5. On vi keymap change: re-renders prompt immediately via `zle-keymap-select`
 
-```zsh
-zmodload zsh/datetime
-zmodload zsh/parameter
+The compiled binary wraps ANSI escapes in `%{...%}` (zsh) or `\[...\]` (bash) when `--var shell:zsh`/`bash` is passed, so the shell calculates prompt width correctly.
 
-promptorius_precmd() {
-    local exit_code=$?
-    local duration_ms=0
+Exit code display: only shown once after a command runs. Hitting Enter without a command suppresses it (detected via `preexec` flag).
 
-    if [[ -n "$_promptorius_cmd_ran" ]]; then
-        if [[ -n "$_promptorius_start" ]]; then
-            duration_ms=$(( (EPOCHREALTIME - _promptorius_start) * 1000 ))
-            duration_ms=${duration_ms%.*}
-        fi
-        unset _promptorius_cmd_ran
-    else
-        exit_code=0
-        duration_ms=0
-    fi
-    unset _promptorius_start
+## Architecture (for future development)
 
-    local job_count=${#jobstates[*]}
-
-    # Auto-recompile if stale
-    local script="${XDG_CONFIG_HOME:-$HOME/.config}/promptorius/config"
-    local binary="${XDG_DATA_HOME:-$HOME/.local/share}/promptorius/__promptorius_output"
-    local compiler="$(command -v promptorius)"
-
-    if [[ ! -f "$binary" || "$script" -nt "$binary" || "$compiler" -nt "$binary" ]]; then
-        promptorius compile
-    fi
-
-    local -a vars=(
-        --var "exit_code:${exit_code}"
-        --var "duration:${duration_ms}"
-        --var "jobs:${job_count}"
-        --var "keymap:${_promptorius_keymap}"
-        --var "shell:zsh"
-        --var "shlvl:${SHLVL}"
-    )
-    PROMPT="$($binary "${vars[@]}")"
-    RPROMPT="$($binary --right "${vars[@]}")"
-    _promptorius_keymap="${KEYMAP:-}"
-}
-
-promptorius_render() {
-    # Re-render on keymap change without re-checking staleness
-    local -a vars=(
-        --var "exit_code:0"
-        --var "keymap:${_promptorius_keymap}"
-        --var "shell:zsh"
-        --var "shlvl:${SHLVL}"
-    )
-    local binary="${XDG_DATA_HOME:-$HOME/.local/share}/promptorius/__promptorius_output"
-    PROMPT="$($binary "${vars[@]}")"
-    RPROMPT="$($binary --right "${vars[@]}")"
-    zle reset-prompt 2>/dev/null
-}
-
-promptorius_preexec() {
-    _promptorius_start=$EPOCHREALTIME
-    _promptorius_cmd_ran=1
-}
-
-promptorius_zle_keymap_select() {
-    _promptorius_keymap="${KEYMAP:-}"
-    promptorius_render
-}
-
-autoload -Uz add-zsh-hook
-add-zsh-hook precmd promptorius_precmd
-add-zsh-hook preexec promptorius_preexec
-
-zle -N zle-keymap-select promptorius_zle_keymap_select
-```
-
-## Default script
-
-Shipped in the promptorius source tree at `default_config`. Copied to `$XDG_CONFIG_HOME/promptorius/config` on first run if no config exists.
+### Source layout
 
 ```
-# Promptorius prompt script
-# https://github.com/user/promptorius
-
-# --- Colors ---
-colors = {
-    directory: "#6ec2e8",
-    error: { fg: "red", bold: true },
-    char_normal: "#666",
-    char_vicmd: "#ff40c0",
-    git_branch: "#e89050",
-    # git_staged: "green",
-    # git_modified: "yellow",
-    # git_untracked: "red",
-    # battery_normal: "green",
-    # battery_low: "#ff8800",
-    # battery_critical: { fg: "red", bold: true },
-}
-colors(colors)
-
-# --- Left prompt ---
-fn left_prompt() {
-    result = ""
-
-    # Show non-zero exit code
-    if (exit_code != 0) {
-        result += C("error") + "Exited w/ " + exit_code + C("") + "\n"
-    }
-
-    # Directory
-    result += C("directory") + cwd().replace(env("HOME"), "~") + C("")
-
-    # Prompt character: │ for user, # for root, repeated SHLVL times
-    char = env("USER") == "root" ? "#" : "│"
-    col = keymap === "vicmd" ? "char_vicmd" : "char_normal"
-    result += " " + C(col) + char.repeat(shlvl) + C("") + " "
-
-    return result
-}
-
-# --- Right prompt ---
-fn right_prompt() {
-    if (!git.is_repo()) { return "" }
-    return C("git_branch") + " " + git.branch() + C("")
-}
-
-# --- Uncomment below for more features ---
-
-# fn git_prompt() {
-#     if (!git.is_repo()) { return "" }
-#     branch = git.branch()
-#     s = git.status()
-#     indicators = ""
-#     if (s.staged > 0)    { indicators += C("git_staged") + " +" }
-#     if (s.modified > 0)  { indicators += C("git_modified") + " ✎" }
-#     if (s.untracked > 0) { indicators += C("git_untracked") + " ?" }
-#     if (s.conflicts > 0) { indicators += C("error") + " ✘" }
-#     if (indicators != "") { indicators += C("") }
-#     remote = ""
-#     if (s.ahead > 0)  { remote += " ↑" + s.ahead }
-#     if (s.behind > 0) { remote += " ↓" + s.behind }
-#     return C("git_branch") + " " + branch + indicators + remote + C("")
-# }
-
-# fn battery_prompt() {
-#     pct = battery.pct()
-#     if (pct < 0) { return "" }
-#     state = battery.state()
-#     if (state == "full") { return "" }
-#     col = pct <= 10 ? "battery_critical" : pct <= 25 ? "battery_low" : "battery_normal"
-#     icon = pct > 75 ? "█" : pct > 50 ? "▆" : pct > 25 ? "▄" : pct > 10 ? "▂" : "▁"
-#     suffix = state == "charging" ? "⚡" : ""
-#     return C(col) + icon + " " + pct + "%" + suffix + C("")
-# }
+src/
+  main.rs              # Entry point
+  cli/mod.rs           # CLI: compile, clean, init, explain, check, completions
+  lang/
+    token.rs           # Token types (with span tracking)
+    lexer.rs           # Tokenizer (# comments, 3 string types, backtick interpolation, ASI)
+    ast.rs             # AST node types
+    parser.rs          # Recursive descent parser
+  codegen/
+    mod.rs             # Top-level code generation orchestration
+    runtime.rs         # Inline Rust runtime (Value type, coercion, all built-ins) as const string
+    expr.rs            # Expression → Rust codegen
+    stmt.rs            # Statement → Rust codegen
+  compiler/
+    mod.rs             # compile(), is_stale(), clean(), paths, default config
+    project.rs         # Manages persistent cargo project in XDG_DATA_HOME
+default_config         # Default config script, shipped in binary
+src/shell/             # Shell init scripts (zsh.sh, bash.sh, fish.fish, nushell.nu)
 ```
+
+### How compilation works internally
+
+1. **Lexer** tokenizes the script (handles ASI, regex disambiguation removed — use `regex()`)
+2. **Parser** produces an AST (recursive descent with operator precedence climbing)
+3. **Codegen** walks the AST and emits Rust source:
+   - Known builtins (`env`, `cwd`, `C`, `colors`, `git.*`, `file.*`, etc.) map to `builtin_*` functions
+   - User-defined functions become `user_fn_*` Rust functions AND get registered as closures in scope
+   - Unknown function calls do dynamic scope lookup (closure dispatch with runtime error if not callable)
+   - IIFEs (`fn() { ... }()`) are inlined as blocks (not Rust closures) to preserve scope mutation
+   - The runtime Value type uses Clone semantics throughout
+4. **Compiler** manages a persistent cargo project, writes the generated `main.rs`, runs `cargo build --release`
+
+### Key design decisions
+
+- **No regex literals** — `/pattern/` was removed due to ambiguity with division. Use `regex("pattern", "flags")`.
+- **No bare blocks** — `{ ... }` at statement level is always a dict. Use `fn() { ... }()` for scoping.
+- **Dynamic dispatch for calls** — all non-builtin function calls resolve at runtime via scope lookup. Calling a non-function exits with an error.
+- **Scope is Clone** — closures capture a clone of the scope. IIFE bodies are inlined to avoid this.
+- **Named colors use ANSI codes** — `"red"` emits `\x1b[31m` (respects terminal theme), hex colors use truecolor.
+- **Colors via `C()`** — short name for the most frequently called function in prompt scripts.
+
+### Known limitations / future work
+
+- Scoping is flat (clone-based), not true lexical parent-chain. Closures passed to `spawn()` don't see mutations to the parent scope after creation.
+- No `break` / `continue` in loops.
+- No `try` / `catch` — runtime errors exit the binary.
+- No multi-line string literals (use `\n` or backtick interpolation).
+- No spread operator for arrays/dicts.
+- No destructuring assignment.
+- The old Rhai-based code is still in the source tree (config/, host/, pipeline/, render/, script/, stdlib/) — can be removed once the compiled approach is stable.
+- `promptorius explain` could instrument individual built-in calls, not just top-level functions.
+- The generated Rust emits some warnings (unreachable code after `return`, unused variables) — harmless but noisy.
 
 ## Non-goals
 
@@ -628,4 +599,3 @@ fn right_prompt() {
 - **No plugin system.** One script file, compiled to one binary.
 - **No package manager.** Copy-paste functions between scripts.
 - **No Windows support for v1.** macOS and Linux only.
-
