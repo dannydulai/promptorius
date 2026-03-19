@@ -210,6 +210,7 @@ fn init_shell(shell: &str) {
         "zsh" => print!("{}", include_str!("../shell/zsh.sh")),
         "bash" => print!("{}", include_str!("../shell/bash.sh")),
         "fish" => print!("{}", include_str!("../shell/fish.fish")),
+        "nushell" | "nu" => print!("{}", include_str!("../shell/nushell.nu")),
         _ => eprintln!("promptorius: unsupported shell: {shell}"),
     }
 }

@@ -1,12 +1,16 @@
 __promptorius_timer_start() {
-    _promptorius_start=${_promptorius_start:-$SECONDS}
+    _promptorius_start=${_promptorius_start:-$(date +%s%3N)}
 }
 
 __promptorius_prompt_command() {
     local exit_code=$?
-    local duration=$(( SECONDS - ${_promptorius_start:-$SECONDS} ))
+    local duration_ms=0
+    if [[ -n "$_promptorius_start" ]]; then
+        local now=$(date +%s%3N)
+        duration_ms=$(( now - _promptorius_start ))
+    fi
     unset _promptorius_start
-    local cmd_args="--cmd :int:exit_code:${exit_code} --cmd :int:duration:${duration}"
+    local cmd_args="--cmd :int:exit_code:${exit_code} --cmd :int:duration:${duration_ms}"
     PS1="$(promptorius $cmd_args)"
 }
 
