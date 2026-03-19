@@ -282,6 +282,22 @@ fn right_prompt() {
 | `dir.search(pattern)` | array | Glob match from cwd |
 | `dir.search_upwards(name)` | string | Walk up from cwd looking for file, `""` if not found |
 
+### Concurrency
+
+| Function | Returns | Description |
+|---|---|---|
+| `spawn(closure)` | future | Run a closure on the thread pool, returns a future |
+| `wait(futures)` | array | Wait for an array of futures to resolve, returns array of results |
+
+```
+# Run git and battery checks in parallel
+f1 = spawn(fn() { git.branch() })
+f2 = spawn(fn() { battery.pct() })
+results = wait([f1, f2])
+branch = results[0]
+pct = results[1]
+```
+
 ### Command execution
 
 | Function | Returns | Description |
