@@ -2,8 +2,10 @@
 let dir = cwd();
 let home = env("HOME");
 
-if dir.starts_with(home) {
+let display = if dir.starts_with(home) {
     "~" + dir[home.len()..]
 } else {
     dir
-}
+};
+
+color("directory") + display + color("")

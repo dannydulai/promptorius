@@ -127,15 +127,18 @@ pub fn load() -> Result<Config, ConfigError> {
     Ok(config)
 }
 
-const DEFAULT_CONFIG: &str = r#"[prompt]
-format = '{s("directory")} {s("git")}{s("character")}'
-right_format = '{s("exitcode")}'
+const DEFAULT_CONFIG: &str = r##"[prompt]
+format = '{s("exitcode")}{s("directory")}{s("jobs")}{s("character")} '
+right_format = '{s("git_branch")}'
 add_newline = true
 
 [colors]
 default = "white"
-directory = { fg = "cyan", bold = true }
-git = "purple"
+directory = "#6ec2e8"
+jobs = "#ff8080"
+char_normal = "#666"
+char_vicmd = "#ff40c0"
+git_branch = "#e89050"
 success = "green"
 warning = "yellow"
 error = { fg = "red", bold = true }
@@ -144,8 +147,8 @@ muted = { fg = "bright_black", dim = true }
 [segments.directory]
 script = "directory.rhai"
 
-[segments.git]
-script = "git.rhai"
+[segments.jobs]
+script = "jobs.rhai"
 
 [segments.character]
 script = "character.rhai"
@@ -153,10 +156,13 @@ script = "character.rhai"
 [segments.exitcode]
 script = "exitcode.rhai"
 
+[segments.git_branch]
+script = "git_branch.rhai"
+
 [settings]
 timeout = 50
 concurrency = 4
-"#;
+"##;
 
 fn create_default_config(path: &std::path::Path) -> Result<(), ConfigError> {
     if let Some(parent) = path.parent() {
