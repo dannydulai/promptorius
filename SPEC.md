@@ -2,10 +2,6 @@
 
 A compiled, scriptable shell prompt engine. Write your prompt in a simple scripting language, compile it to a native binary, get sub-millisecond rendering.
 
-## Problem
-
-Starship has ~100+ hardcoded modules. Promptorius v1 replaced them with Rhai scripts, but Rhai's engine initialization (~1ms) and interpretation overhead remained. This version eliminates the interpreter entirely: your prompt script compiles to native Rust, producing a standalone binary with zero runtime overhead.
-
 ## How it works
 
 ```
@@ -30,11 +26,11 @@ A dynamically-typed scripting language with JavaScript-like coercion, designed f
 ### Basics
 
 ```
-# This is a comment (# only, // is not supported)
+# This is a comment (# only)
 
 x = 5
 name = "world"
-greeting = `hello {name}`    # backtick interpolation, no $ needed
+greeting = `hello {name}`    # backtick interpolation
 ```
 
 - `#` comments to end of line
@@ -42,7 +38,7 @@ greeting = `hello {name}`    # backtick interpolation, no $ needed
 - Bare assignment creates variables (`x = 5`, no `let` needed)
 - `null` keyword for unset values
 - `true` / `false` booleans
-- Accessing an undefined variable returns `null` (no errors)
+- Accessing an undefined variable returns `null`
 - Functions require explicit `return`; without it they return `null`
 
 ### Strings
@@ -180,15 +176,15 @@ Calling a non-function value prints an error to stderr and exits.
 
 ```
 arr = [1, 2, 3]
-arr.push(4)           # returns new array with element added
-arr.pop()             # returns removed last element
-arr.shift()           # returns removed first element
-arr.len()             # length
+arr.push(4)
+arr.pop()
+arr.shift()
+arr.len()
 arr.map(fn(x) { return x * 2 })
 arr.filter(fn(x) { return x > 0 })
 arr.reduce(fn(acc, x) { return acc + x }, 0)
-first = arr[0]        # index access
-arr[0] = "new"        # index assignment
+first = arr[0]
+arr[0] = "new"
 ```
 
 ### Dicts
@@ -199,20 +195,20 @@ d = {
     age: 30,
     nested: { foo: "bar" },
 }
-d["name"]             # index access
-d.name                # member access (same thing)
-d.get("name")         # returns null if missing
-d.keys()              # array of keys
-d.values()            # array of values
-d.len()               # number of entries
-d.foo = "bar"         # member assignment
-d.foo += "!"          # compound member assignment
-d["key"] = "val"      # index assignment
+d["name"]
+d.name
+d.get("name")    # returns null if missing
+d.keys()
+d.values()
+d.len()
+d.foo = "bar"
+d.foo += "!"
+d["key"] = "val"
 ```
 
 ### Regular expressions
 
-Created from strings using the `regex()` function (no inline `/pattern/` literals):
+Created from strings using the `regex()` function:
 
 ```
 re = regex("^hello", "i")
@@ -237,26 +233,22 @@ Two functions are required:
 Everything else (global variables, helper functions, `colors()` call) is top-level code that runs once at startup.
 
 ```
-# Set up color palette
 colors({
     directory: "#6ec2e8",
     error: { fg: "red", bold: true },
     git_branch: "#e89050",
 })
 
-# Helper function
 fn git_prompt() {
     if (!git.is_repo()) { return "" }
     return `{C("git_branch")} {git.branch()}{C("")}`
 }
 
-# Required
 fn left_prompt() {
     dir = cwd().replace(env("HOME"), "~")
     return `{C("directory")}{dir}{C("")} > `
 }
 
-# Required
 fn right_prompt() {
     return git_prompt()
 }
@@ -297,7 +289,6 @@ fn right_prompt() {
 | `wait(input)` | dict or array | Wait for futures to resolve. Accepts a dict or array, returns same shape with resolved values. |
 
 ```
-# Run git operations in parallel
 w = wait({
     branch: spawn(fn() { return git.branch() }),
     status: spawn(fn() { return git.status() }),
@@ -370,10 +361,10 @@ Named colors use standard ANSI codes (30-37, 90-97) so they respect your termina
 
 | Function | Description |
 |---|---|
-| `string(val)` | Force convert to string. `null` → `""`, numbers → decimal string, bool → `"true"`/`"false"` |
-| `number(val)` | Force convert to number. `null` → `0`, `""` → `0`, `"5.2"` → `5.2`, non-numeric strings → `0`, `true` → `1`, `false` → `0` |
-| `array(val)` | Force convert to array. `null` → `[]`, string → `[string]`, array → identity |
-| `dict(val)` | Force convert to dict. `null` → `{}`, array of `[key, value]` pairs → dict |
+| `string(val)` | Force convert to string |
+| `number(val)` | Force convert to number |
+| `array(val)` | Force convert to array |
+| `dict(val)` | Force convert to dict |
 
 ### String methods
 
@@ -403,7 +394,7 @@ Named colors use standard ANSI codes (30-37, 90-97) so they respect your termina
 | `a.shift()` | Returns removed first element |
 | `a.map(fn)` | Returns new array with fn applied to each element |
 | `a.filter(fn)` | Returns new array with elements where fn returns truthy |
-| `a.reduce(fn, init)` | Reduces array to single value. fn receives (accumulator, element) |
+| `a.reduce(fn, init)` | Reduces array to single value |
 
 ### Dict methods
 
@@ -429,76 +420,49 @@ The compiled binary accepts `--var name:value` to inject global variables. Value
 __promptorius_output --var exit_code:0 --var keymap:vicmd --var shell:zsh
 ```
 
-All variable names are valid — accessing an undefined variable returns `null` instead of an error. This means `--var` declarations are optional; scripts can check any variable name safely.
-
-`--right` flag tells the binary to call `right_prompt()` instead of `left_prompt()`.
+All variable names are valid — accessing an undefined variable returns `null`. `--right` flag calls `right_prompt()` instead of `left_prompt()`.
 
 ### Standard variables (passed by shell integration)
 
-| Variable | Type | Description |
-|---|---|---|
-| `exit_code` | string (coerces to number) | Exit code of the last command. `"0"` if no command ran. |
-| `duration` | string (coerces to number) | Duration of last command in milliseconds |
-| `jobs` | string (coerces to number) | Number of background jobs |
-| `keymap` | string | Vi keymap: `""` (insert/default), `"vicmd"` (normal) |
-| `shell` | string | Shell name: `"zsh"`, `"bash"`, `"fish"`, `"nu"` |
-| `shlvl` | string (coerces to number) | Shell nesting level |
+| Variable | Description |
+|---|---|
+| `exit_code` | Exit code of the last command. `"0"` if no command ran. |
+| `duration` | Duration of last command in milliseconds |
+| `jobs` | Number of background jobs |
+| `keymap` | Vi keymap: `""` (insert/default), `"vicmd"` (normal) |
+| `shell` | Shell name: `"zsh"`, `"bash"`, `"fish"`, `"nu"` |
+| `shlvl` | Shell nesting level |
+
+## CLI
+
+```
+promptorius compile                        # Compile config → default output
+promptorius compile <script> <output>      # Compile specific files
+promptorius init <shell>                   # Print shell init script (zsh, bash, fish, nushell)
+promptorius check [script]                 # Validate script syntax
+promptorius explain [--right] [--var k:v]  # Build instrumented binary and show timing
+promptorius clean                          # Remove build directory
+promptorius completions <shell>            # Generate shell completions
+```
 
 ## Compilation
 
-### `promptorius compile`
+### How it works
 
-```
-promptorius compile                    # compile config → __promptorius_output
-promptorius compile <script> <output>  # compile specific script to specific output
-```
-
-What it does:
 1. Parses the script into an AST
-2. Generates a complete Rust source file containing:
-   - The runtime (Value type, coercion, all built-in functions) as inline Rust code
-   - The compiled script logic as Rust functions
-   - A `main()` that parses `--var` / `--right` and calls `left_prompt()` or `right_prompt()`
-3. Builds the binary using a persistent cargo project in `$XDG_DATA_HOME/promptorius/build/`
+2. Generates a complete Rust source file (runtime + compiled script + main)
+3. Builds using a persistent cargo project in `$XDG_DATA_HOME/promptorius/build/`
    - First build: downloads and compiles dependencies (~30s one-time)
-   - Subsequent builds: only recompiles the generated source (~1-2s incremental)
+   - Subsequent builds: only recompiles the generated source (~1-2s)
 4. Copies the binary to `$XDG_DATA_HOME/promptorius/__promptorius_output`
 
-### Build failure handling
-
-If the build fails due to a non-script-syntax issue (e.g. missing system library, corrupted build cache), promptorius shows the error and suggests running `promptorius clean` to retry.
-
-### `promptorius clean`
-
-Removes the entire build directory at `$XDG_DATA_HOME/promptorius/build/`, forcing a full rebuild on next compile.
-
-### `promptorius explain`
-
-Compiles a special instrumented binary `__promptorius_explanation` that times `script_init()`, `left_prompt()`/`right_prompt()`, and shell escape wrapping separately. Shows a timing breakdown:
-
-```
---- promptorius explain ---
-
-     0.05ms  script_init
-     0.06ms  left_prompt()
-     0.00ms  shell escape wrapping
-
-     0.15ms  total
-       71    output bytes
----
-```
-
-### `promptorius check`
-
-Validates script syntax without building. Reports defined functions and warns if `left_prompt` or `right_prompt` are missing.
-
-### Staleness check
+### Staleness
 
 The binary is stale if:
-- The script file is newer than the binary (mtime comparison)
-- The `promptorius` compiler binary is newer than the output binary (runtime update)
+- The script file is newer than the binary (mtime)
+- The `promptorius` compiler binary is newer than the output binary
 
-### Dependencies (in the build project's Cargo.toml)
+### Dependencies (in the generated project)
 
 | Crate | Purpose |
 |---|---|
@@ -507,91 +471,25 @@ The binary is stale if:
 | `glob` | File globbing |
 | `regex` | Regular expressions |
 
-## CLI
-
-```
-promptorius compile                     # Compile config → default output
-promptorius compile <script> <output>   # Compile specific files
-promptorius init <shell>                # Print shell init script (zsh, bash, fish, nushell)
-promptorius check [script]              # Validate script syntax
-promptorius explain [--right] [--var k:v]  # Build instrumented binary and show timing
-promptorius clean                       # Remove build directory
-promptorius completions <shell>         # Generate shell completions
-```
-
 ## Shell integration
 
-Supported shells: zsh, bash, fish, nushell.
+Supported: zsh, bash, fish, nushell.
 
-`promptorius init zsh` outputs a shell script that:
+The shell init script handles:
+- Staleness check and auto-recompile
+- Duration timing (millisecond precision)
+- Background job counting
+- Vi keymap change detection (zsh: re-renders immediately)
+- Exit code suppression on empty Enter (only shows once after a real command)
+- ANSI escape wrapping (`%{...%}` for zsh, `\[...\]` for bash)
 
-1. On `precmd`: checks if `__promptorius_output` is stale
-2. If stale: runs `promptorius compile` (shows status messages during build)
-3. Calls `__promptorius_output` with `--var` args for exit code, duration, keymap, jobs, shell, shlvl
-4. Sets `PROMPT` and `RPROMPT`
-5. On vi keymap change: re-renders prompt immediately via `zle-keymap-select`
+## Known limitations
 
-The compiled binary wraps ANSI escapes in `%{...%}` (zsh) or `\[...\]` (bash) when `--var shell:zsh`/`bash` is passed, so the shell calculates prompt width correctly.
-
-Exit code display: only shown once after a command runs. Hitting Enter without a command suppresses it (detected via `preexec` flag).
-
-## Architecture (for future development)
-
-### Source layout
-
-```
-src/
-  main.rs              # Entry point
-  cli/mod.rs           # CLI: compile, clean, init, explain, check, completions
-  lang/
-    token.rs           # Token types (with span tracking)
-    lexer.rs           # Tokenizer (# comments, 3 string types, backtick interpolation, ASI)
-    ast.rs             # AST node types
-    parser.rs          # Recursive descent parser
-  codegen/
-    mod.rs             # Top-level code generation orchestration
-    runtime.rs         # Inline Rust runtime (Value type, coercion, all built-ins) as const string
-    expr.rs            # Expression → Rust codegen
-    stmt.rs            # Statement → Rust codegen
-  compiler/
-    mod.rs             # compile(), is_stale(), clean(), paths, default config
-    project.rs         # Manages persistent cargo project in XDG_DATA_HOME
-default_config         # Default config script, shipped in binary
-src/shell/             # Shell init scripts (zsh.sh, bash.sh, fish.fish, nushell.nu)
-```
-
-### How compilation works internally
-
-1. **Lexer** tokenizes the script (handles ASI, regex disambiguation removed — use `regex()`)
-2. **Parser** produces an AST (recursive descent with operator precedence climbing)
-3. **Codegen** walks the AST and emits Rust source:
-   - Known builtins (`env`, `cwd`, `C`, `colors`, `git.*`, `file.*`, etc.) map to `builtin_*` functions
-   - User-defined functions become `user_fn_*` Rust functions AND get registered as closures in scope
-   - Unknown function calls do dynamic scope lookup (closure dispatch with runtime error if not callable)
-   - IIFEs (`fn() { ... }()`) are inlined as blocks (not Rust closures) to preserve scope mutation
-   - The runtime Value type uses Clone semantics throughout
-4. **Compiler** manages a persistent cargo project, writes the generated `main.rs`, runs `cargo build --release`
-
-### Key design decisions
-
-- **No regex literals** — `/pattern/` was removed due to ambiguity with division. Use `regex("pattern", "flags")`.
-- **No bare blocks** — `{ ... }` at statement level is always a dict. Use `fn() { ... }()` for scoping.
-- **Dynamic dispatch for calls** — all non-builtin function calls resolve at runtime via scope lookup. Calling a non-function exits with an error.
-- **Scope is Clone** — closures capture a clone of the scope. IIFE bodies are inlined to avoid this.
-- **Named colors use ANSI codes** — `"red"` emits `\x1b[31m` (respects terminal theme), hex colors use truecolor.
-- **Colors via `C()`** — short name for the most frequently called function in prompt scripts.
-
-### Known limitations / future work
-
-- Scoping is flat (clone-based), not true lexical parent-chain. Closures passed to `spawn()` don't see mutations to the parent scope after creation.
-- No `break` / `continue` in loops.
-- No `try` / `catch` — runtime errors exit the binary.
-- No multi-line string literals (use `\n` or backtick interpolation).
-- No spread operator for arrays/dicts.
-- No destructuring assignment.
-- The old Rhai-based code is still in the source tree (config/, host/, pipeline/, render/, script/, stdlib/) — can be removed once the compiled approach is stable.
-- `promptorius explain` could instrument individual built-in calls, not just top-level functions.
-- The generated Rust emits some warnings (unreachable code after `return`, unused variables) — harmless but noisy.
+- No `break` / `continue` in loops
+- No `try` / `catch`
+- No multi-line string literals (use `\n` or backtick interpolation)
+- No spread operator or destructuring
+- Closures capture scope by clone; mutations after creation don't propagate
 
 ## Non-goals
 

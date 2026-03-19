@@ -21,26 +21,17 @@ pub enum CompileError {
 
 /// Compile a script file to a native binary.
 pub fn compile(script_path: &Path, output_path: &Path) -> Result<(), CompileError> {
-    eprintln!("promptorius: reading {}", script_path.display());
+    eprint!("Promptorius needs to rebuild. Please wait a few seconds while this happens…");
 
     let source = std::fs::read_to_string(script_path)?;
     let program = Parser::parse(&source)?;
-
-    eprintln!("promptorius: generating rust code");
     let rust_source = codegen::generate(&program);
-
     let build_dir = project::ensure_build_project()?;
-
-    eprintln!("promptorius: writing generated source");
     project::write_source(&build_dir, &rust_source)?;
-
-    eprintln!("promptorius: building (this may take a moment on first run)");
     project::build(&build_dir)?;
-
-    eprintln!("promptorius: copying binary");
     project::copy_binary(&build_dir, output_path)?;
 
-    eprintln!("promptorius: done → {}", output_path.display());
+    eprintln!(" done.");
     Ok(())
 }
 

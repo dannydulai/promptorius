@@ -1,18 +1,12 @@
 # Agents Guide
 
-Promptorius is a compiled prompt engine. Users write a config script in a custom language, which compiles to a native Rust binary for sub-millisecond prompt rendering.
-
-## Quick orientation
-
-- **What it does**: Shell prompt replacement. Script compiles to native binary.
-- **Language**: Rust (compiler), custom scripting language (user config)
-- **Branch**: `experiment1` is the compiled version. `main` has the old Rhai-based interpreter.
+Promptorius compiles a custom scripting language to native Rust binaries for sub-millisecond shell prompt rendering.
 
 ## Repository map
 
 ```
-SPEC.md                     # Full language + product spec
-ARCHITECTURE.md             # Module structure, invariants, pipeline
+SPEC.md                     # Language + product spec
+ARCHITECTURE.md             # Module structure, invariants
 default_config              # Default config script, shipped in binary
 src/
 ├── main.rs                 # Entry point
@@ -23,7 +17,7 @@ src/
 │   ├── ast.rs              # AST nodes
 │   └── parser.rs           # Recursive descent parser
 ├── codegen/                # Rust code generation
-│   ├── mod.rs              # Orchestration (generate, generate_instrumented)
+│   ├── mod.rs              # Orchestration
 │   ├── runtime.rs          # Inline Rust runtime (~800 lines as const string)
 │   ├── expr.rs             # Expression codegen
 │   └── stmt.rs             # Statement codegen
@@ -31,10 +25,6 @@ src/
 │   ├── mod.rs              # compile(), is_stale(), clean(), paths
 │   └── project.rs          # Manages cargo project in XDG_DATA_HOME
 └── shell/                  # Shell init scripts
-    ├── zsh.sh
-    ├── bash.sh
-    ├── fish.fish
-    └── nushell.nu
 ```
 
 Legacy code (to be removed): `config/`, `host/`, `pipeline/`, `render/`, `script/`, `stdlib/`
@@ -42,15 +32,15 @@ Legacy code (to be removed): `config/`, `host/`, `pipeline/`, `render/`, `script
 ## How to work
 
 - `cargo build` — build the compiler
-- `cargo test` — run all tests (79 passing)
-- `target/debug/promptorius compile` — compile the user's config to a binary
-- `target/debug/promptorius check` — validate config syntax
+- `cargo test` — run tests
+- `target/debug/promptorius compile` — compile the user's config
+- `target/debug/promptorius check` — validate syntax
 - `target/debug/promptorius explain --var exit_code:0` — timing breakdown
 - `target/debug/promptorius clean` — nuke the build cache
 
-## Important notes
+## Gotchas
 
-- The runtime in `codegen/runtime.rs` is a raw Rust string (`r##"..."##`). Be careful with string escaping — `{` and `}` in format strings need doubling.
-- Bulk find-and-replace on function names is dangerous — `color` → `c` once turned `builtin_colors` into `builtin_cs`. Always check for partial matches.
-- The generated Rust lives at `$XDG_DATA_HOME/promptorius/build/src/main.rs` — inspect it when debugging codegen issues.
-- IIFEs (`fn() { ... }()`) MUST be inlined, not generated as Rust closures, because closures capture scope by clone and mutations don't propagate back.
+- The runtime in `runtime.rs` is a raw string (`r##"..."##`). Bulk find-and-replace can cause partial matches — always verify.
+- The generated Rust lives at `$XDG_DATA_HOME/promptorius/build/src/main.rs` — inspect it when debugging codegen.
+- IIFEs (`fn() { ... }()`) MUST be inlined, not Rust closures, because closures capture scope by clone.
+- After any API rename: update codegen, runtime, spec, default_config, and the user's config.
