@@ -1,11 +1,6 @@
 // Prompt character: │ for non-root, # for root
 // Repeated $SHLVL times
 // Colored by vi keymap: #ff40c0 in vicmd, #666 otherwise
-let char = if env("USER") == "root" { "#" } else { "│" };
-
-let shlvl = env("SHLVL");
-let count = if shlvl == "" { 1 } else { shlvl.parse_int() };
-if count < 1 { count = 1; }
 
 let result = "";
 
@@ -13,7 +8,7 @@ let result = "";
 let count = jobs();
 
 if count > 0 {
-    result += color("jobs") + "҂ ";
+    result += color("jobs") + "҂";
 }
 
 if keymap() == "vicmd" {
@@ -21,6 +16,12 @@ if keymap() == "vicmd" {
 } else {
     result += color("keymap_normal")
 }
+
+let shlvl = env("SHLVL");
+let count = if shlvl == "" { 1 } else { shlvl.parse_int() };
+if count < 1 { count = 1; }
+
+let char = if env("USER") == "root" { "#" } else { "│" };
 
 for i in 0..count {
     result += char;

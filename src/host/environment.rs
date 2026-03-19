@@ -17,6 +17,10 @@ pub fn register(engine: &mut Engine) {
             .unwrap_or_default()
     });
 
+    engine.register_fn("eprint", |msg: &str| {
+        eprintln!("{msg}");
+    });
+
     engine.register_fn("os", || -> String {
         if cfg!(target_os = "macos") {
             "macos".to_string()
