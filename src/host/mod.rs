@@ -88,10 +88,12 @@ fn register_cmd(engine: &mut rhai::Engine, cmd: &CmdDef) {
     }
 }
 
-/// Register the segment `config` map for a specific segment.
-pub fn register_segment_config(engine: &mut rhai::Engine, extra: &HashMap<String, toml::Value>) {
+/// Create a Rhai scope with the segment's `config` map pre-populated.
+pub fn segment_scope(extra: &HashMap<String, toml::Value>) -> rhai::Scope<'static> {
     let map = toml_to_rhai_map(extra);
-    engine.register_fn("config", move || map.clone());
+    let mut scope = rhai::Scope::new();
+    scope.push_constant("config", map);
+    scope
 }
 
 fn toml_to_rhai_map(extra: &HashMap<String, toml::Value>) -> rhai::Map {

@@ -3,7 +3,7 @@
 //! Configures the Rhai engine with string coercion overloads and delegates
 //! host API registration to the `host` module.
 
-use rhai::{Engine, AST};
+use rhai::{Engine, Scope, AST};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -55,6 +55,13 @@ impl ScriptEngine {
         &self.engine
     }
 
+    /// Compile a script from a source string. Returns the AST.
+    pub fn compile_source(&self, source: &str) -> Result<AST, ScriptError> {
+        self.engine
+            .compile(source)
+            .map_err(|e| ScriptError::Compile(e.to_string()))
+    }
+
     /// Compile a script file and cache the AST. Returns the cached AST on subsequent calls.
     pub fn compile_file(&mut self, path: &Path) -> Result<&AST, ScriptError> {
         if !self.cache.contains_key(path) {
@@ -72,9 +79,20 @@ impl ScriptEngine {
     /// Evaluate a compiled AST and return the result as a string.
     /// Returns `None` if the script returned `()`.
     pub fn eval_ast(&self, ast: &AST) -> Result<Option<String>, ScriptError> {
+        let mut scope = Scope::new();
+        self.eval_ast_with_scope(ast, &mut scope)
+    }
+
+    /// Evaluate a compiled AST with a pre-populated scope.
+    /// Returns `None` if the script returned `()`.
+    pub fn eval_ast_with_scope(
+        &self,
+        ast: &AST,
+        scope: &mut Scope,
+    ) -> Result<Option<String>, ScriptError> {
         let result: rhai::Dynamic = self
             .engine
-            .eval_ast(ast)
+            .eval_ast_with_scope(scope, ast)
             .map_err(|e| ScriptError::Runtime(e.to_string()))?;
 
         if result.is_unit() {
