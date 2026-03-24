@@ -33,6 +33,9 @@ pub enum SubCommand {
         script: Option<String>,
         /// Output binary path (default: $XDG_DATA_HOME/promptorius/__promptorius_output).
         output: Option<String>,
+        /// Force recompile even if the binary is up to date.
+        #[arg(short, long)]
+        force: bool,
     },
     /// Remove the build directory and force a full rebuild.
     Clean,
@@ -70,7 +73,7 @@ pub fn parse() -> Args {
 
 pub fn run(args: Args) -> Result<(), CliError> {
     match args.command {
-        Some(SubCommand::Compile { script, output }) => {
+        Some(SubCommand::Compile { script, output, force }) => {
             let script_path = script
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(|| {
@@ -79,6 +82,10 @@ pub fn run(args: Args) -> Result<(), CliError> {
             let output_path = output
                 .map(std::path::PathBuf::from)
                 .unwrap_or_else(compiler::default_output_path);
+
+            if !force && !compiler::is_stale(&script_path, &output_path) {
+                return Ok(());
+            }
 
             match compiler::compile(&script_path, &output_path) {
                 Ok(()) => Ok(()),
@@ -119,11 +126,9 @@ pub fn run(args: Args) -> Result<(), CliError> {
             Ok(())
         }
         None => {
-            // Default: compile (same as `promptorius compile`)
-            let script_path = compiler::ensure_default_config()
-                .unwrap_or_else(|_| compiler::default_script_path());
-            let output_path = compiler::default_output_path();
-            compiler::compile(&script_path, &output_path)?;
+            use clap::CommandFactory;
+            Args::command().print_help().unwrap();
+            println!();
             Ok(())
         }
     }
